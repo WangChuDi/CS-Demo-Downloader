@@ -1,0 +1,9 @@
+services:
+  cs-demo-downloader:
+    build: .
+    container_name: cs-demo-downloader
+    volumes:
+      - ./config:/config          # 配置文件目录
+      - ./demos:/demos            # Demo 下载目录
+    # 可配合 cron 或 systemd timer 定时运行
+    # 运行方式: docker-compose run --rm cs-demo-downloader

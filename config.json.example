@@ -1,0 +1,16 @@
+{
+  "download_path": "/demos",
+  "users_5e": [
+    {
+      "name": "example_user",
+      "userid": "YOUR_5E_USERID_HERE"
+    }
+  ],
+  "users_pwa": [
+    {
+      "name": "example_user",
+      "steamid": "YOUR_STEAM_ID_HERE",
+      "access_token": "YOUR_ACCESS_TOKEN_HERE"
+    }
+  ]
+}

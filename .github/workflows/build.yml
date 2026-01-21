@@ -1,0 +1,105 @@
+name: Build Windows EXE
+
+on:
+  push:
+    branches: [ main ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements-gui.txt
+        pip install pyinstaller
+    
+    - name: Build EXE
+      run: |
+        pyinstaller --onefile --windowed --name="CS_Demo_Downloader" --icon=resources/icon.ico main.py
+      continue-on-error: true
+    
+    - name: Build EXE (without icon)
+      if: failure()
+      run: |
+        pyinstaller --onefile --windowed --name="CS_Demo_Downloader" main.py
+    
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: CS_Demo_Downloader_Windows
+        path: dist/CS_Demo_Downloader.exe
+        if-no-files-found: error
+
+  build-linux:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libxcb-xinerama0 libxcb-cursor0
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements-gui.txt
+        pip install pyinstaller
+    
+    - name: Build Linux binary
+      run: |
+        pyinstaller --onefile --name="CS_Demo_Downloader" main.py
+    
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: CS_Demo_Downloader_Linux
+        path: dist/CS_Demo_Downloader
+        if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build-windows, build-linux]
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Download Windows artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: CS_Demo_Downloader_Windows
+        path: windows
+    
+    - name: Download Linux artifact
+      uses: actions/download-artifact@v4
+      with:
+        name: CS_Demo_Downloader_Linux
+        path: linux
+    
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          windows/CS_Demo_Downloader.exe
+          linux/CS_Demo_Downloader
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

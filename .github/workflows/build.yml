@@ -29,12 +29,6 @@ jobs:
     
     - name: Build EXE
       run: |
-        pyinstaller --onefile --windowed --name="CS_Demo_Downloader" --icon=resources/icon.ico main.py
-      continue-on-error: true
-    
-    - name: Build EXE (without icon)
-      if: failure()
-      run: |
         pyinstaller --onefile --windowed --name="CS_Demo_Downloader" main.py
     
     - name: Upload artifact

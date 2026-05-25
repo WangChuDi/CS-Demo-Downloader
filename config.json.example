@@ -12,5 +12,29 @@
       "steamid": "YOUR_STEAM_ID_HERE",
       "access_token": "YOUR_ACCESS_TOKEN_HERE"
     }
-  ]
+  ],
+  "users_steam": [
+    {
+      "name": "example_user",
+      "steamid": "YOUR_STEAM_ID64_HERE",
+      "api_key": "YOUR_STEAM_WEB_API_KEY_HERE",
+      "steamidkey": "YOUR_STEAM_ID_KEY_HERE",
+      "knowncode": "CSGO-xxxxx-xxxxx-xxxxx-xxxxx-xxxxx"
+    }
+  ],
+  "steam_resolver": {
+    "type": "boiler",
+    "executable_path": "boiler-writter",
+    "auto_download": "true",
+    "cache_dir": "",
+    "timeout": "60"
+  },
+  "steam_gc": {
+    "username_env": "STEAM_GC_USERNAME",
+    "password_env": "STEAM_GC_PASSWORD",
+    "two_factor_secret_env": "STEAM_GC_TWO_FACTOR_SECRET",
+    "auth_code_env": "STEAM_GC_AUTH_CODE",
+    "sentry_dir": "",
+    "timeout": "30"
+  }
 }

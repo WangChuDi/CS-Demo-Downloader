@@ -27,6 +27,7 @@ classifiers = [
   "Topic :: Utilities"
 ]
 dependencies = [
+  "cryptography>=41.0.0",
   "requests>=2.28.0"
 ]
 

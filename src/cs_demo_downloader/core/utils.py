@@ -7,7 +7,40 @@ import datetime
 import time
 import zipfile
 import requests
-from typing import Callable, Optional
+from typing import Callable, Dict, Optional
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+
+
+SENSITIVE_QUERY_KEYS = {
+    'access_token',
+    'api_key',
+    'auth',
+    'key',
+    'password',
+    's',
+    'signature',
+    'steamidkey',
+    'token',
+}
+
+
+def redact_url(url: str) -> str:
+    """Redact sensitive query parameters before logging a URL."""
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return '<redacted-url>'
+
+    if not parts.query:
+        return url
+
+    safe_query = urlencode(
+        [
+            (key, '<redacted>' if key.lower() in SENSITIVE_QUERY_KEYS else value)
+            for key, value in parse_qsl(parts.query, keep_blank_values=True)
+        ]
+    )
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, safe_query, parts.fragment))
 
 
 def get_end_of_day_timestamp(date: Optional[datetime.date] = None) -> int:
@@ -32,7 +65,8 @@ def get_timestamp_days_ago(days: int) -> int:
 def download_file(
     url: str,
     local_path: str,
-    progress_callback: Optional[Callable[[int, int], None]] = None
+    progress_callback: Optional[Callable[[int, int], None]] = None,
+    headers: Optional[Dict[str, str]] = None,
 ) -> Optional[str]:
     """
     下载文件，支持进度回调
@@ -49,13 +83,16 @@ def download_file(
         # 确保目录存在
         os.makedirs(os.path.dirname(local_path), exist_ok=True)
         
-        with requests.get(url, stream=True, timeout=30) as r:
+        with requests.get(url, stream=True, timeout=30, headers=headers) as r:
             r.raise_for_status()
             
             # 检查响应类型
             content_type = r.headers.get('Content-Type', '')
             if 'text/html' in content_type:
-                print(f"Invalid response type: {content_type}")
+                print(f"Invalid response type: {content_type} for {redact_url(url)}")
+                return None
+            if 'application/json' in content_type:
+                print(f"Invalid response type: {content_type} for {redact_url(url)}")
                 return None
             
             total_size = int(r.headers.get('content-length', 0))
@@ -73,7 +110,7 @@ def download_file(
         return local_path
     
     except requests.RequestException as e:
-        print(f"Download error: {e}")
+        print(f"Download error for {redact_url(url)}: {type(e).__name__}")
         return None
     except OSError as e:
         print(f"File write error for '{local_path}': {e}")
@@ -154,7 +191,8 @@ def get_demo_filename_from_url(url: str) -> str:
 def download_and_extract(
     url: str,
     demo_path: str,
-    progress_callback: Optional[Callable[[int, int], None]] = None
+    progress_callback: Optional[Callable[[int, int], None]] = None,
+    headers: Optional[Dict[str, str]] = None,
 ) -> bool:
     """
     下载并解压 Demo 文件
@@ -185,7 +223,7 @@ def download_and_extract(
     if not (archive_path.endswith('.zip') or archive_path.endswith('.bz2')):
         archive_path += '.zip'
 
-    downloaded = download_file(url, archive_path, progress_callback)
+    downloaded = download_file(url, archive_path, progress_callback, headers=headers)
     if not downloaded:
         return False
 

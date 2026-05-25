@@ -10,8 +10,9 @@ import os
 from .core.config import load_config, Config, ConfigLoadError
 from .core.downloader_5e import get_all_demo_urls as get_5e_demos
 from .core.downloader_pwa import get_all_demo_urls as get_pwa_demos
+from .core.downloader_pwa import build_download_headers as build_pwa_download_headers
 from .core.downloader_steam import get_all_demo_urls as get_steam_demos
-from .core.utils import download_and_extract
+from .core.utils import download_and_extract, redact_url
 
 
 def print_progress(downloaded: int, total: int):
@@ -65,8 +66,13 @@ def download_pwa_demos(config: Config):
         print(f"Found {len(demo_urls)} demos")
         
         for match_id, demo_url in demo_urls.items():
-            print(f"\nMatch {match_id}: {demo_url}")
-            download_and_extract(demo_url, config.download_path, print_progress)
+            print(f"\nMatch {match_id}: {redact_url(demo_url)}")
+            try:
+                headers = build_pwa_download_headers(user.steamid)
+            except RuntimeError as e:
+                print(f"Unable to build PWA download headers for {user.name}: {e}", file=sys.stderr)
+                continue
+            download_and_extract(demo_url, config.download_path, print_progress, headers=headers)
             print()  # 换行
 
 

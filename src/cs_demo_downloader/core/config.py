@@ -7,6 +7,10 @@ from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, asdict, field
 
 
+class ConfigLoadError(Exception):
+    """配置文件加载失败"""
+
+
 @dataclass
 class User5E:
     """5E 用户配置"""
@@ -23,11 +27,24 @@ class UserPWA:
 
 
 @dataclass
+class UserSteam:
+    """Steam 官匹用户配置"""
+    name: str
+    steamid: str
+    api_key: str
+    steamidkey: str
+    knowncode: str
+
+
+@dataclass
 class Config:
     """应用配置"""
     download_path: str = ""
+    steam_resolver: Dict[str, str] = field(default_factory=dict)
+    steam_gc: Dict[str, str] = field(default_factory=dict)
     users_5e: List[Dict[str, str]] = field(default_factory=list)
     users_pwa: List[Dict[str, str]] = field(default_factory=list)
+    users_steam: List[Dict[str, str]] = field(default_factory=list)
     
     def get_users_5e(self) -> List[User5E]:
         """获取 5E 用户列表"""
@@ -36,6 +53,10 @@ class Config:
     def get_users_pwa(self) -> List[UserPWA]:
         """获取完美世界用户列表"""
         return [UserPWA(**u) for u in self.users_pwa]
+
+    def get_users_steam(self) -> List[UserSteam]:
+        """获取 Steam 官匹用户列表"""
+        return [UserSteam(**u) for u in self.users_steam]
     
     def add_user_5e(self, name: str, userid: str):
         """添加 5E 用户"""
@@ -48,6 +69,23 @@ class Config:
             "steamid": steamid,
             "access_token": access_token
         })
+
+    def add_user_steam(
+        self,
+        name: str,
+        steamid: str,
+        api_key: str,
+        steamidkey: str,
+        knowncode: str
+    ):
+        """添加 Steam 官匹用户"""
+        self.users_steam.append({
+            "name": name,
+            "steamid": steamid,
+            "api_key": api_key,
+            "steamidkey": steamidkey,
+            "knowncode": knowncode
+        })
     
     def remove_user_5e(self, index: int):
         """删除 5E 用户"""
@@ -58,6 +96,11 @@ class Config:
         """删除完美世界用户"""
         if 0 <= index < len(self.users_pwa):
             self.users_pwa.pop(index)
+
+    def remove_user_steam(self, index: int):
+        """删除 Steam 官匹用户"""
+        if 0 <= index < len(self.users_steam):
+            self.users_steam.pop(index)
 
 
 def get_config_path() -> str:
@@ -83,21 +126,31 @@ def load_config(config_path: Optional[str] = None) -> Config:
     Returns:
         Config 对象
     """
+    explicit_path = config_path is not None
+
     if config_path is None:
         config_path = get_config_path()
-    
+
     if os.path.exists(config_path):
         try:
             with open(config_path, 'r', encoding='utf-8') as f:
                 data = json.load(f)
                 return Config(
                     download_path=data.get('download_path', ''),
+                    steam_resolver=data.get('steam_resolver', {}),
+                    steam_gc=data.get('steam_gc', {}),
                     users_5e=data.get('users_5e', []),
-                    users_pwa=data.get('users_pwa', [])
+                    users_pwa=data.get('users_pwa', []),
+                    users_steam=data.get('users_steam', [])
                 )
         except (json.JSONDecodeError, IOError) as e:
-            print(f"Error loading config: {e}")
-    
+            message = f"Error loading config '{config_path}': {e}"
+            if explicit_path:
+                raise ConfigLoadError(message) from e
+            print(message)
+    elif explicit_path:
+        raise ConfigLoadError(f"Config file not found: {config_path}")
+
     return Config()
 
 
@@ -121,8 +174,11 @@ def save_config(config: Config, config_path: Optional[str] = None):
         with open(config_path, 'w', encoding='utf-8') as f:
             data = {
                 'download_path': config.download_path,
+                'steam_resolver': config.steam_resolver,
+                'steam_gc': config.steam_gc,
                 'users_5e': config.users_5e,
-                'users_pwa': config.users_pwa
+                'users_pwa': config.users_pwa,
+                'users_steam': config.users_steam
             }
             json.dump(data, f, indent=2, ensure_ascii=False)
     except IOError as e:

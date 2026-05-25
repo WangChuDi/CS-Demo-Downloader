@@ -1,32 +1,15 @@
 #!/usr/bin/env python3
-"""
-CS Demo Downloader - GUI 入口
-"""
-import sys
+"""Compatibility wrapper for the packaged GUI."""
 import os
+import sys
 
-# 添加项目根目录到路径
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+ROOT = os.path.dirname(os.path.abspath(__file__))
+SRC = os.path.join(ROOT, "src")
+if SRC not in sys.path:
+    sys.path.insert(0, SRC)
 
-from PyQt5.QtWidgets import QApplication
-from PyQt5.QtCore import Qt
-
-from gui.main_window import MainWindow
-
-
-def main():
-    # 高 DPI 支持
-    QApplication.setAttribute(Qt.AA_EnableHighDpiScaling, True)
-    QApplication.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
-    
-    app = QApplication(sys.argv)
-    app.setApplicationName("CS Demo Downloader")
-    
-    window = MainWindow()
-    window.show()
-    
-    sys.exit(app.exec_())
+from cs_demo_downloader.gui_main import main
 
 
-if __name__ == '__main__':
-    main()
+if __name__ == "__main__":
+    sys.exit(main())

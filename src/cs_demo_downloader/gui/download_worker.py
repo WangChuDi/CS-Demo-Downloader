@@ -4,10 +4,12 @@
 from PyQt5.QtCore import QThread, pyqtSignal
 from typing import List, Tuple
 
-from core.downloader_5e import get_all_demo_urls as get_5e_demos
-from core.downloader_pwa import get_all_demo_urls as get_pwa_demos
-from core.utils import download_and_extract
-from core.config import Config
+from cs_demo_downloader.core.downloader_5e import get_all_demo_urls as get_5e_demos
+from cs_demo_downloader.core.downloader_pwa import get_all_demo_urls as get_pwa_demos
+from cs_demo_downloader.core.downloader_steam import get_all_demo_urls as get_steam_demos
+from cs_demo_downloader.core.utils import download_and_extract
+from cs_demo_downloader.core.config import Config
+from cs_demo_downloader.cli import build_steam_demo_url_resolver
 
 
 class FetchDemosWorker(QThread):
@@ -23,7 +25,7 @@ class FetchDemosWorker(QThread):
     def __init__(self, config: Config, platform: str = 'all'):
         super().__init__()
         self.config = config
-        self.platform = platform  # 'all', '5e', 'pwa'
+        self.platform = platform  # 'all', '5e', 'pwa', 'steam'
     
     def run(self):
         if self.platform in ('all', '5e'):
@@ -31,6 +33,9 @@ class FetchDemosWorker(QThread):
         
         if self.platform in ('all', 'pwa'):
             self._fetch_pwa_demos()
+
+        if self.platform in ('all', 'steam'):
+            self._fetch_steam_demos()
         
         self.finished_signal.emit()
     
@@ -51,6 +56,22 @@ class FetchDemosWorker(QThread):
             
             for match_id, demo_url in demo_urls.items():
                 self.demo_found.emit('pwa', user.name, match_id, demo_url)
+
+    def _fetch_steam_demos(self):
+        users = self.config.get_users_steam()
+        demo_url_resolver = build_steam_demo_url_resolver(self.config)
+        for user in users:
+            self.status_update.emit(f"正在获取 Steam 官匹用户 {user.name} 的比赛列表...")
+            demo_urls = get_steam_demos(
+                user.api_key,
+                user.steamid,
+                user.steamidkey,
+                user.knowncode,
+                demo_url_resolver=demo_url_resolver,
+            )
+
+            for match_id, demo_url in demo_urls.items():
+                self.demo_found.emit('steam', user.name, match_id, demo_url)
 
 
 class DownloadWorker(QThread):

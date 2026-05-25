@@ -2,6 +2,7 @@
 通用工具模块 - 下载、解压、时间戳工具
 """
 import os
+import bz2
 import datetime
 import time
 import zipfile
@@ -74,6 +75,9 @@ def download_file(
     except requests.RequestException as e:
         print(f"Download error: {e}")
         return None
+    except OSError as e:
+        print(f"File write error for '{local_path}': {e}")
+        return None
 
 
 def unzip_file(zip_path: str, extract_path: str) -> bool:
@@ -88,9 +92,32 @@ def unzip_file(zip_path: str, extract_path: str) -> bool:
         成功返回 True，失败返回 False
     """
     try:
-        os.makedirs(extract_path, exist_ok=True)
+        extract_root = os.path.abspath(extract_path)
+        os.makedirs(extract_root, exist_ok=True)
+
+        def is_within_extract_root(target_path: str) -> bool:
+            return os.path.commonpath([extract_root, target_path]) == extract_root
+
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-            zip_ref.extractall(extract_path)
+            for member in zip_ref.infolist():
+                normalized_name = member.filename.replace('\\', os.sep)
+                target_path = os.path.abspath(os.path.join(extract_root, normalized_name))
+
+                if not is_within_extract_root(target_path):
+                    print(f"Unsafe zip entry detected: {member.filename}")
+                    return False
+
+            for member in zip_ref.infolist():
+                normalized_name = member.filename.replace('\\', os.sep)
+                target_path = os.path.abspath(os.path.join(extract_root, normalized_name))
+
+                if member.is_dir():
+                    os.makedirs(target_path, exist_ok=True)
+                    continue
+
+                os.makedirs(os.path.dirname(target_path), exist_ok=True)
+                with zip_ref.open(member, 'r') as source, open(target_path, 'wb') as target:
+                    target.write(source.read())
         return True
     except zipfile.BadZipFile as e:
         print(f"Bad zip file: {e}")
@@ -98,6 +125,30 @@ def unzip_file(zip_path: str, extract_path: str) -> bool:
     except Exception as e:
         print(f"Unzip error: {e}")
         return False
+
+
+def extract_bz2_file(bz2_path: str, dem_path: str) -> bool:
+    """解压 BZ2 Demo 文件"""
+    try:
+        os.makedirs(os.path.dirname(dem_path), exist_ok=True)
+        with bz2.open(bz2_path, 'rb') as source, open(dem_path, 'wb') as target:
+            target.write(source.read())
+        return True
+    except OSError as e:
+        print(f"BZ2 extract error: {e}")
+        return False
+
+
+def get_demo_filename_from_url(url: str) -> str:
+    """从 Demo 下载 URL 推导最终 .dem 文件名"""
+    filename = url.split('/')[-1].split('?')[0]
+    if filename.endswith('.dem.bz2'):
+        return filename[:-4]
+    if filename.endswith('.zip'):
+        return filename[:-4] + '.dem'
+    if filename.endswith('.dem'):
+        return filename
+    return filename.split('.')[0] + '.dem'
 
 
 def download_and_extract(
@@ -121,35 +172,34 @@ def download_and_extract(
         return False
     
     # 从 URL 提取文件名
-    filename = url.split('/')[-1]
-    
+    filename = url.split('/')[-1].split('?')[0]
+
     # 检查解压后的 .dem 文件是否已存在
-    dem_filename = filename.replace('.zip', '.dem')
-    if not dem_filename.endswith('.dem'):
-        dem_filename = filename.split('.')[0] + '.dem'
-    
+    dem_filename = get_demo_filename_from_url(url)
     dem_path = os.path.join(demo_path, dem_filename)
     if os.path.exists(dem_path):
         print(f"File {dem_filename} already exists, skipping.")
         return True
     
-    # 下载 ZIP 文件
-    zip_path = os.path.join(demo_path, filename)
-    if not zip_path.endswith('.zip'):
-        zip_path += '.zip'
-    
-    downloaded = download_file(url, zip_path, progress_callback)
+    archive_path = os.path.join(demo_path, filename)
+    if not (archive_path.endswith('.zip') or archive_path.endswith('.bz2')):
+        archive_path += '.zip'
+
+    downloaded = download_file(url, archive_path, progress_callback)
     if not downloaded:
         return False
-    
-    # 解压
-    if unzip_file(zip_path, demo_path):
-        # 删除 ZIP 文件
+
+    if archive_path.endswith('.bz2'):
+        extracted = extract_bz2_file(archive_path, dem_path)
+    else:
+        extracted = unzip_file(archive_path, demo_path)
+
+    if extracted:
         try:
-            os.remove(zip_path)
+            os.remove(archive_path)
         except OSError:
             pass
         print(f"Downloaded and extracted to {demo_path}")
         return True
-    
+
     return False

@@ -11,9 +11,10 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtGui import QIcon
 
-from core.config import Config, load_config, save_config
+from cs_demo_downloader.core.config import Config, load_config, save_config
+from cs_demo_downloader.core.utils import get_demo_filename_from_url
 from .styles import STYLESHEET
-from .user_manager import Add5EUserDialog, AddPWAUserDialog
+from .user_manager import Add5EUserDialog, AddPWAUserDialog, AddSteamUserDialog
 from .download_worker import FetchDemosWorker, DownloadWorker
 
 
@@ -74,6 +75,7 @@ class MainWindow(QMainWindow):
         self.config = load_config()
         self.demos_5e = []  # [(match_id, demo_url, user_name), ...]
         self.demos_pwa = []
+        self.demos_steam = []
         self.fetch_worker = None
         self.download_worker = None
         
@@ -145,6 +147,22 @@ class MainWindow(QMainWindow):
         users_pwa_layout.addStretch()
         
         users_layout.addWidget(self.users_pwa_group)
+
+        # Steam 官匹用户
+        self.users_steam_group = QGroupBox("Steam 官匹用户")
+        users_steam_layout = QHBoxLayout(self.users_steam_group)
+        users_steam_layout.setAlignment(Qt.AlignLeft)
+
+        self.users_steam_container = QHBoxLayout()
+        users_steam_layout.addLayout(self.users_steam_container)
+
+        add_steam_btn = QPushButton("+ 添加")
+        add_steam_btn.setObjectName("addButton")
+        add_steam_btn.clicked.connect(self.add_steam_user)
+        users_steam_layout.addWidget(add_steam_btn)
+        users_steam_layout.addStretch()
+
+        users_layout.addWidget(self.users_steam_group)
         
         layout.addLayout(users_layout)
         
@@ -164,6 +182,10 @@ class MainWindow(QMainWindow):
         # 完美世界 Demo 标签页
         self.table_pwa = self.create_demo_table()
         self.tab_widget.addTab(self.table_pwa, "完美世界 Demo")
+
+        # Steam 官匹 Demo 标签页
+        self.table_steam = self.create_demo_table()
+        self.tab_widget.addTab(self.table_steam, "Steam 官匹 Demo")
         
         layout.addWidget(self.tab_widget)
         
@@ -213,6 +235,7 @@ class MainWindow(QMainWindow):
         # 清空现有标签
         self.clear_layout(self.users_5e_container)
         self.clear_layout(self.users_pwa_container)
+        self.clear_layout(self.users_steam_container)
         
         # 添加 5E 用户
         for i, user in enumerate(self.config.get_users_5e()):
@@ -223,6 +246,11 @@ class MainWindow(QMainWindow):
         for i, user in enumerate(self.config.get_users_pwa()):
             tag = UserTagWidget(user.name, lambda name, idx=i: self.delete_pwa_user(idx))
             self.users_pwa_container.addWidget(tag)
+
+        # 添加 Steam 官匹用户
+        for i, user in enumerate(self.config.get_users_steam()):
+            tag = UserTagWidget(user.name, lambda name, idx=i: self.delete_steam_user(idx))
+            self.users_steam_container.addWidget(tag)
     
     def clear_layout(self, layout):
         """清空布局中的所有组件"""
@@ -257,6 +285,21 @@ class MainWindow(QMainWindow):
             save_config(self.config)
             self.load_users()
     
+    def add_steam_user(self):
+        """添加 Steam 官匹用户"""
+        dialog = AddSteamUserDialog(self)
+        if dialog.exec_():
+            data = dialog.get_data()
+            self.config.add_user_steam(
+                data['name'],
+                data['steamid'],
+                data['api_key'],
+                data['steamidkey'],
+                data['knowncode'],
+            )
+            save_config(self.config)
+            self.load_users()
+
     def delete_5e_user(self, index: int):
         """删除 5E 用户"""
         reply = QMessageBox.question(
@@ -281,6 +324,18 @@ class MainWindow(QMainWindow):
             save_config(self.config)
             self.load_users()
     
+    def delete_steam_user(self, index: int):
+        """删除 Steam 官匹用户"""
+        reply = QMessageBox.question(
+            self, "确认删除",
+            "确定要删除这个用户吗？",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        if reply == QMessageBox.Yes:
+            self.config.remove_user_steam(index)
+            save_config(self.config)
+            self.load_users()
+
     def refresh_demos(self):
         """刷新 Demo 列表"""
         if self.fetch_worker and self.fetch_worker.isRunning():
@@ -289,8 +344,10 @@ class MainWindow(QMainWindow):
         # 清空列表
         self.table_5e.setRowCount(0)
         self.table_pwa.setRowCount(0)
+        self.table_steam.setRowCount(0)
         self.demos_5e.clear()
         self.demos_pwa.clear()
+        self.demos_steam.clear()
         
         self.status_label.setText("正在获取 Demo 列表...")
         
@@ -305,9 +362,12 @@ class MainWindow(QMainWindow):
         if platform == '5e':
             table = self.table_5e
             self.demos_5e.append((match_id, demo_url, user_name))
-        else:
+        elif platform == 'pwa':
             table = self.table_pwa
             self.demos_pwa.append((match_id, demo_url, user_name))
+        else:
+            table = self.table_steam
+            self.demos_steam.append((match_id, demo_url, user_name))
         
         row = table.rowCount()
         table.insertRow(row)
@@ -332,11 +392,7 @@ class MainWindow(QMainWindow):
         if not self.config.download_path:
             return "待下载"
         
-        filename = demo_url.split('/')[-1]
-        dem_filename = filename.replace('.zip', '.dem')
-        if not dem_filename.endswith('.dem'):
-            dem_filename = filename.split('.')[0] + '.dem'
-        
+        dem_filename = get_demo_filename_from_url(demo_url)
         dem_path = os.path.join(self.config.download_path, dem_filename)
         if os.path.exists(dem_path):
             return "已存在"
@@ -345,7 +401,7 @@ class MainWindow(QMainWindow):
     
     def on_fetch_complete(self):
         """获取 Demo 列表完成"""
-        total = len(self.demos_5e) + len(self.demos_pwa)
+        total = len(self.demos_5e) + len(self.demos_pwa) + len(self.demos_steam)
         self.status_label.setText(f"找到 {total} 个 Demo")
     
     def download_selected(self):
@@ -373,6 +429,13 @@ class MainWindow(QMainWindow):
             status_item = self.table_pwa.item(row, 3)
             if checkbox and checkbox.isChecked() and status_item.text() != "已存在":
                 demos_to_download.append(self.demos_pwa[row])
+
+        # Steam 官匹 Demo
+        for row in range(self.table_steam.rowCount()):
+            checkbox = self.table_steam.cellWidget(row, 0)
+            status_item = self.table_steam.item(row, 3)
+            if checkbox and checkbox.isChecked() and status_item.text() != "已存在":
+                demos_to_download.append(self.demos_steam[row])
         
         if not demos_to_download:
             QMessageBox.information(self, "提示", "没有需要下载的 Demo")
@@ -398,7 +461,7 @@ class MainWindow(QMainWindow):
         status = "已完成" if success else "失败"
         
         # 更新表格状态
-        for table in [self.table_5e, self.table_pwa]:
+        for table in [self.table_5e, self.table_pwa, self.table_steam]:
             for row in range(table.rowCount()):
                 item = table.item(row, 2)
                 if item and item.text() == match_id:

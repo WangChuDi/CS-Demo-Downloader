@@ -11,7 +11,7 @@ CS Demo Downloader 是一个用于下载 Counter-Strike Demo 文件的工具，�
 | 平台 | CLI 参数值 | 需要的账号字段 | 说明 |
 | --- | --- | --- | --- |
 | 5E | `5e` | `userid` | 从 5E 玩家主页 URL 中获取用户 ID。 |
-| 完美世界电竞 / PWA | `pwa` | `steamid`, `access_token` | 需要有效的完美世界电竞网页登录/客户端令牌。 |
+| 完美世界电竞 / PWA | `pwa` | `steamid`, `access_token` | 需要有效的完美世界电竞网页登录/客户端令牌，下载链接会在本地签名。 |
 | Steam 官匹 | `steam` | `steamid`, `api_key`, `steamidkey`, `knowncode` | 已实现 Steam Web API share code 迭代；真实 replay URL 仍需要 Steam Game Coordinator full match info。 |
 
 目前没有实现其他平台。
@@ -102,10 +102,10 @@ https://www.5eplay.com/player/11814738gjdwn7
 
 1. 登录完美世界电竞网页版或客户端。
 2. 打开浏览器开发者工具。
-3. 在 Network 请求中查找已登录请求。
+3. 在 Network 请求或 Cookie 中查找已登录请求。
 4. 将 `steamid` 和 `access_token` 填入 `config.json`。
 
-Access Token 可能会过期。如果 PWA 下载突然不可用，优先刷新 token。
+PWA Demo 下载链接现在会使用当前签名参数生成，并在最终文件请求中发送必要的 PWA 请求头。Access Token 可能会过期。如果 PWA 下载突然不可用，优先刷新 token。
 
 ### 获取 Steam 官匹参数
 
@@ -133,13 +133,40 @@ pip install -e .[steam-boiler]
 pip install -e .[steam-login]
 ```
 
-## CLI 使用
+## 通过 pip 安装
 
-安装 CLI 依赖：
+安装默认 CLI/运行时包：
+
+```bash
+pip install cs-demo-downloader
+```
+
+可选 extras：
+
+```bash
+# 桌面 GUI
+pip install "cs-demo-downloader[gui]"
+
+# Steam 官匹：本机 Steam + boiler-writter parser 依赖
+pip install "cs-demo-downloader[steam-boiler]"
+
+# Steam 官匹：steam-login/csgo GC 依赖
+pip install "cs-demo-downloader[steam-login]"
+```
+
+如果是从本仓库源码本地开发，使用 editable install：
 
 ```bash
 pip install -e .
+pip install -e ".[gui]"
 ```
+
+安装后会提供两个命令：
+
+- `cs-demo-downloader`：命令行下载器。
+- `cs-demo-downloader-gui`：PyQt5 桌面 GUI，需要安装 `gui` extra。
+
+## CLI 使用
 
 查看帮助：
 
@@ -179,6 +206,84 @@ cs-demo-downloader download --all --config config.json --output ./demos
 ```
 
 当显式传入 `--config` 时，如果该文件不存在或 JSON 格式错误，CLI 会输出错误并返回非零退出码。这是为了让 Docker、cron、CI 等自动化环境能及时发现配置问题。
+
+## Python API 使用
+
+安装后也可以在你自己的 Python 脚本中直接导入内置函数。公开模块主要包括各平台 downloader 和通用下载/解压 helper。
+
+### 5E
+
+```python
+from cs_demo_downloader.core.downloader_5e import get_all_demo_urls
+from cs_demo_downloader.core.utils import download_and_extract
+
+demo_urls = get_all_demo_urls("YOUR_5E_USERID")
+
+for match_id, demo_url in demo_urls.items():
+    print("downloading", match_id)
+    download_and_extract(demo_url, "./demos")
+```
+
+### 完美世界电竞 / PWA
+
+PWA 下载需要 signed URL 和 PWA 下载请求头。生成的 URL 包含 `access_token`，不要打印或持久化保存。
+
+```python
+from cs_demo_downloader.core.downloader_pwa import (
+    build_download_headers,
+    get_all_demo_urls,
+)
+from cs_demo_downloader.core.utils import download_and_extract
+
+steamid = "YOUR_STEAM_ID64"
+access_token = "YOUR_PWA_ACCESS_TOKEN"
+
+headers = build_download_headers(steamid)
+demo_urls = get_all_demo_urls(steamid, access_token, size=20)
+
+for match_id, demo_url in demo_urls.items():
+    print("downloading", match_id)
+    download_and_extract(demo_url, "./demos", headers=headers)
+```
+
+如果只想拿 signed URL 给其他下载器使用：
+
+```python
+from cs_demo_downloader.core.downloader_pwa import get_demo_url
+
+demo_url = get_demo_url("MATCH_ID", "YOUR_PWA_ACCESS_TOKEN")
+```
+
+### Steam 官匹
+
+Steam Web API share-code 迭代在 `downloader_steam` 中提供。真实 replay URL 仍需要 Steam GC resolver，例如内置的 boiler-writter resolver。
+
+```python
+from cs_demo_downloader.core.downloader_steam import get_all_demo_urls
+from cs_demo_downloader.steam.boiler_resolver import BoilerWritterResolver
+
+resolver = BoilerWritterResolver(auto_download=True)
+
+demo_urls = get_all_demo_urls(
+    api_key="YOUR_STEAM_WEB_API_KEY",
+    steamid="YOUR_STEAM_ID64",
+    steamidkey="YOUR_MATCH_SHARING_AUTH_KEY",
+    knowncode="CSGO-xxxxx-xxxxx-xxxxx-xxxxx-xxxxx",
+    demo_url_resolver=resolver.resolve_demo_url,
+)
+```
+
+### 配置文件 helper
+
+如果想复用 CLI 的 JSON 配置文件：
+
+```python
+from cs_demo_downloader.core.config import load_config
+
+config = load_config("config.json")
+for user in config.get_users_pwa():
+    print(user.name, user.steamid)
+```
 
 ## GUI 使用
 

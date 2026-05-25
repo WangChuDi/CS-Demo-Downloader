@@ -73,7 +73,7 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.config = load_config()
-        self.demos_5e = []  # [(match_id, demo_url, user_name), ...]
+        self.demos_5e = []  # [(match_id, demo_url, user_name, platform_or_steamid), ...]
         self.demos_pwa = []
         self.demos_steam = []
         self.fetch_worker = None
@@ -357,17 +357,17 @@ class MainWindow(QMainWindow):
         self.fetch_worker.finished_signal.connect(self.on_fetch_complete)
         self.fetch_worker.start()
     
-    def on_demo_found(self, platform: str, user_name: str, match_id: str, demo_url: str):
+    def on_demo_found(self, platform: str, user_name: str, match_id: str, demo_url: str, platform_or_steamid: str):
         """发现新 Demo"""
         if platform == '5e':
             table = self.table_5e
-            self.demos_5e.append((match_id, demo_url, user_name))
+            self.demos_5e.append((match_id, demo_url, user_name, platform_or_steamid))
         elif platform == 'pwa':
             table = self.table_pwa
-            self.demos_pwa.append((match_id, demo_url, user_name))
+            self.demos_pwa.append((match_id, demo_url, user_name, platform_or_steamid))
         else:
             table = self.table_steam
-            self.demos_steam.append((match_id, demo_url, user_name))
+            self.demos_steam.append((match_id, demo_url, user_name, platform_or_steamid))
         
         row = table.rowCount()
         table.insertRow(row)

@@ -11,7 +11,7 @@ The current implementation supports three platforms:
 | Platform | CLI value | Required account fields | Notes |
 | --- | --- | --- | --- |
 | 5EPlay | `5e` | `userid` | The user id is read from a 5E player profile URL. |
-| Perfect World Arena | `pwa` | `steamid`, `access_token` | Requires a valid Perfect World Arena web/client token. |
+| Perfect World Arena | `pwa` | `steamid`, `access_token` | Requires a valid Perfect World Arena web/client token. Demo URLs are signed before download. |
 | Steam official matchmaking | `steam` | `steamid`, `api_key`, `steamidkey`, `knowncode` | Implements Steam Web API share-code iteration. Real replay URL resolution still requires Steam Game Coordinator full match info. |
 
 No other platforms are implemented at the moment.
@@ -21,7 +21,7 @@ No other platforms are implemented at the moment.
 - Download demos from 5EPlay, Perfect World Arena, and Steam official matchmaking.
 - Use either the desktop GUI or CLI automation.
 - Docker image for server and scheduled downloads.
-- Automatically extracts downloaded ZIP demo archives.
+- Automatically extracts downloaded ZIP and BZ2 demo archives.
 - Rejects unsafe ZIP entries that try to extract outside the target directory.
 - Fails fast for explicit missing or malformed CLI config files.
 
@@ -102,10 +102,10 @@ The `userid` value is `11814738gjdwn7`.
 
 1. Log in to the Perfect World Arena web page or client.
 2. Open browser developer tools.
-3. Inspect authenticated network requests.
+3. Inspect authenticated network requests or cookies.
 4. Fill `steamid` and `access_token` in `config.json`.
 
-Tokens can expire. If PWA downloads stop working, refresh the token first.
+PWA demo download links are now generated with the current signed query parameters and the downloader sends the required PWA request headers for the final file request. Tokens can expire. If PWA downloads stop working, refresh the token first.
 
 ### Steam Official Matchmaking Credentials
 
@@ -133,13 +133,40 @@ pip install -e .[steam-boiler]
 pip install -e .[steam-login]
 ```
 
-## CLI Usage
+## Install from pip
 
-Install the CLI dependencies:
+Install the default CLI/runtime package:
+
+```bash
+pip install cs-demo-downloader
+```
+
+Optional extras:
+
+```bash
+# Desktop GUI
+pip install "cs-demo-downloader[gui]"
+
+# Steam official matchmaking resolver using local Steam + boiler-writter parser deps
+pip install "cs-demo-downloader[steam-boiler]"
+
+# Steam official matchmaking resolver using steam-login/csgo GC deps
+pip install "cs-demo-downloader[steam-login]"
+```
+
+For local development from this repository, use editable installs instead:
 
 ```bash
 pip install -e .
+pip install -e ".[gui]"
 ```
+
+The package installs these console commands:
+
+- `cs-demo-downloader` - CLI downloader.
+- `cs-demo-downloader-gui` - PyQt5 desktop GUI, available when the `gui` extra is installed.
+
+## CLI Usage
 
 Show help:
 
@@ -179,6 +206,84 @@ cs-demo-downloader download --all --config config.json --output ./demos
 ```
 
 When `--config` is provided explicitly, the CLI exits with a non-zero status if that file is missing or invalid. This is intentional so Docker, cron, and other automation can detect configuration problems.
+
+## Python API Usage
+
+You can also use the installed package from your own Python scripts. The public modules are small function wrappers around each platform downloader plus the shared download/extract helpers.
+
+### 5EPlay
+
+```python
+from cs_demo_downloader.core.downloader_5e import get_all_demo_urls
+from cs_demo_downloader.core.utils import download_and_extract
+
+demo_urls = get_all_demo_urls("YOUR_5E_USERID")
+
+for match_id, demo_url in demo_urls.items():
+    print("downloading", match_id)
+    download_and_extract(demo_url, "./demos")
+```
+
+### Perfect World Arena / PWA
+
+PWA downloads need both the signed URL and the PWA download headers. Do not print or persist generated URLs because they contain `access_token`.
+
+```python
+from cs_demo_downloader.core.downloader_pwa import (
+    build_download_headers,
+    get_all_demo_urls,
+)
+from cs_demo_downloader.core.utils import download_and_extract
+
+steamid = "YOUR_STEAM_ID64"
+access_token = "YOUR_PWA_ACCESS_TOKEN"
+
+headers = build_download_headers(steamid)
+demo_urls = get_all_demo_urls(steamid, access_token, size=20)
+
+for match_id, demo_url in demo_urls.items():
+    print("downloading", match_id)
+    download_and_extract(demo_url, "./demos", headers=headers)
+```
+
+If you only need the signed URL for integration with another downloader:
+
+```python
+from cs_demo_downloader.core.downloader_pwa import get_demo_url
+
+demo_url = get_demo_url("MATCH_ID", "YOUR_PWA_ACCESS_TOKEN")
+```
+
+### Steam Official Matchmaking
+
+Steam Web API share-code iteration is available through `downloader_steam`. A real replay URL still requires a Steam GC resolver such as the built-in boiler-writter resolver.
+
+```python
+from cs_demo_downloader.core.downloader_steam import get_all_demo_urls
+from cs_demo_downloader.steam.boiler_resolver import BoilerWritterResolver
+
+resolver = BoilerWritterResolver(auto_download=True)
+
+demo_urls = get_all_demo_urls(
+    api_key="YOUR_STEAM_WEB_API_KEY",
+    steamid="YOUR_STEAM_ID64",
+    steamidkey="YOUR_MATCH_SHARING_AUTH_KEY",
+    knowncode="CSGO-xxxxx-xxxxx-xxxxx-xxxxx-xxxxx",
+    demo_url_resolver=resolver.resolve_demo_url,
+)
+```
+
+### Config helpers
+
+To reuse the same JSON config file as the CLI:
+
+```python
+from cs_demo_downloader.core.config import load_config
+
+config = load_config("config.json")
+for user in config.get_users_pwa():
+    print(user.name, user.steamid)
+```
 
 ## GUI Usage
 

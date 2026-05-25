@@ -10,10 +10,13 @@ import unittest
 from contextlib import redirect_stderr, redirect_stdout
 from unittest import mock
 
+import requests
+
 from cs_demo_downloader import cli
 from cs_demo_downloader.core.config import Config, ConfigLoadError, load_config
+from cs_demo_downloader.core.downloader_pwa import build_download_headers, get_demo_url, sign_demo_request
 from cs_demo_downloader.core.downloader_steam import decode_share_code, get_all_demo_urls, resolve_demo_url_from_share_code
-from cs_demo_downloader.core.utils import download_and_extract, download_file, unzip_file
+from cs_demo_downloader.core.utils import download_and_extract, download_file, redact_url, unzip_file
 
 
 class LoadConfigTests(unittest.TestCase):
@@ -113,6 +116,45 @@ class DownloadFileTests(unittest.TestCase):
         self.assertIn('File write error', stdout.getvalue())
         self.assertIn(local_path, stdout.getvalue())
 
+    def test_download_file_redacts_sensitive_url_on_request_error(self):
+        sensitive_url = 'https://example.invalid/demo.dem?access_token=secret-token&s=secret-signature&match_id=1'
+        stdout = io.StringIO()
+
+        with mock.patch('cs_demo_downloader.core.utils.requests.get', side_effect=requests.RequestException('boom')):
+            with redirect_stdout(stdout):
+                result = download_file(sensitive_url, '/tmp/demo.zip')
+
+        self.assertIsNone(result)
+        self.assertNotIn('secret-token', stdout.getvalue())
+        self.assertNotIn('secret-signature', stdout.getvalue())
+        self.assertIn('access_token=%3Credacted%3E', stdout.getvalue())
+
+    def test_download_file_redacts_sensitive_url_on_json_response(self):
+        response = mock.MagicMock()
+        response.__enter__.return_value = response
+        response.headers = {'Content-Type': 'application/json'}
+        response.raise_for_status.return_value = None
+        sensitive_url = 'https://example.invalid/demo.dem?access_token=secret-token&match_id=1'
+        stdout = io.StringIO()
+
+        with mock.patch('cs_demo_downloader.core.utils.requests.get', return_value=response):
+            with redirect_stdout(stdout):
+                result = download_file(sensitive_url, '/tmp/demo.zip')
+
+        self.assertIsNone(result)
+        self.assertNotIn('secret-token', stdout.getvalue())
+        self.assertIn('access_token=%3Credacted%3E', stdout.getvalue())
+
+
+class RedactUrlTests(unittest.TestCase):
+    def test_redact_url_hides_sensitive_query_values(self):
+        url = redact_url('https://example.invalid/demo?access_token=secret&s=sig&match_id=123')
+
+        self.assertNotIn('secret', url)
+        self.assertNotIn('sig', url)
+        self.assertIn('match_id=123', url)
+        self.assertIn('access_token=%3Credacted%3E', url)
+
 
 class UnzipFileTests(unittest.TestCase):
     def test_unzip_file_extracts_safe_zip(self):
@@ -196,6 +238,62 @@ class SteamDownloaderTests(unittest.TestCase):
         self.assertEqual(2, get.call_count)
         self.assertEqual(['CSGO-3VocL-obGr4-SjkBU-DjHhz-KWtrD'], list(demo_urls.keys()))
         self.assertTrue(demo_urls['CSGO-3VocL-obGr4-SjkBU-DjHhz-KWtrD'].endswith('.dem.bz2'))
+
+
+class PwaDownloaderTests(unittest.TestCase):
+    def test_sign_demo_request_matches_known_formula(self):
+        signature = sign_demo_request(
+            '123456',
+            '1710000000',
+            'access_token=sample-token&cup_id=0&match_id=987654321',
+        )
+
+        self.assertEqual('32f466a84a03ba8585a6f9860758df28dceaf624', signature)
+
+    def test_get_demo_url_includes_signed_query(self):
+        with mock.patch('cs_demo_downloader.core.downloader_pwa.random.randint', return_value=123456):
+            with mock.patch('cs_demo_downloader.core.downloader_pwa.time.time', return_value=1710000000):
+                demo_url = get_demo_url('987654321', 'sample-token')
+
+        self.assertTrue(demo_url.startswith('https://pwaweblogin.wmpvp.com/csgo/demo/987654321_0.dem?'))
+        self.assertIn('a=20000', demo_url)
+        self.assertIn('r=123456', demo_url)
+        self.assertIn('t=1710000000', demo_url)
+        self.assertIn('access_token=sample-token&cup_id=0&match_id=987654321', demo_url)
+        self.assertIn('s=32f466a84a03ba8585a6f9860758df28dceaf624', demo_url)
+
+    def test_build_download_headers_includes_pwa_signature(self):
+        headers = build_download_headers(
+            '76561198159976336',
+            public_ip='203.0.113.7',
+            timestamp=1710000000,
+        )
+
+        self.assertEqual('76561198159976336', headers['X-PWA-SteamId'])
+        self.assertEqual('76561198159976336', headers['PwaSteamId'])
+        self.assertTrue(headers['X-PWA-Signature'].startswith('1710000000-'))
+        self.assertIn('perfectworldarena/1.0.26051411', headers['User-Agent'])
+
+    def test_cli_downloads_pwa_with_signed_headers(self):
+        config = Config(download_path='/tmp/demos')
+        config.add_user_pwa('pwa-user', '76561198159976336', 'token')
+        stdout = io.StringIO()
+
+        with mock.patch('cs_demo_downloader.cli.get_pwa_demos', return_value={'match-1': 'https://pwaweblogin.wmpvp.com/csgo/demo/match-1_0.dem?access_token=secret-token&a=20000'}):
+            with mock.patch('cs_demo_downloader.cli.build_pwa_download_headers', return_value={'X-PWA-Signature': 'signed'}) as build_headers:
+                with mock.patch('cs_demo_downloader.cli.download_and_extract') as download:
+                    with redirect_stdout(stdout):
+                        cli.download_pwa_demos(config)
+
+        build_headers.assert_called_once_with('76561198159976336')
+        download.assert_called_once_with(
+            'https://pwaweblogin.wmpvp.com/csgo/demo/match-1_0.dem?access_token=secret-token&a=20000',
+            '/tmp/demos',
+            cli.print_progress,
+            headers={'X-PWA-Signature': 'signed'},
+        )
+        self.assertNotIn('secret-token', stdout.getvalue())
+        self.assertIn('access_token=%3Credacted%3E', stdout.getvalue())
 
 
 class Bz2DownloadTests(unittest.TestCase):

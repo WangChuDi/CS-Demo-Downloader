@@ -123,30 +123,32 @@ Steam 官匹提供两个 optional resolver 后端：
 
 Docker 镜像不会内置 `boiler-writter`，也不能直接使用本机 Steam resolver，除非你自己提供可用的 Steam 客户端环境。
 
-按需安装 optional resolver 依赖：
+如果是本地源码目录，按需安装 optional resolver 依赖：
 
 ```bash
 pip install -e .[steam-boiler]
 pip install -e .[steam-login]
 ```
 
-## 通过 pip 安装
+## 从 GitHub 安装
 
-安装默认 CLI/运行时包：
+当前项目还没有发布到 PyPI，所以请直接从公开 GitHub 仓库安装：
 
 ```bash
-pip install cs-demo-downloader
+pip install git+https://github.com/WangChuDi/CS-Demo-Downloader.git
 ```
 
 可选 extras：
 
 ```bash
 # Steam 官匹：本机 Steam + boiler-writter parser 依赖
-pip install "cs-demo-downloader[steam-boiler]"
+pip install "cs-demo-downloader[steam-boiler] @ git+https://github.com/WangChuDi/CS-Demo-Downloader.git"
 
 # Steam 官匹：steam-login/csgo GC 依赖
-pip install "cs-demo-downloader[steam-login]"
+pip install "cs-demo-downloader[steam-login] @ git+https://github.com/WangChuDi/CS-Demo-Downloader.git"
 ```
+
+未来发布到 PyPI 后，才可以使用 `pip install cs-demo-downloader` 这种包名安装方式。
 
 如果是从本仓库源码本地开发，使用 editable install：
 

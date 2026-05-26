@@ -123,30 +123,32 @@ Steam official matchmaking has two optional resolver backends:
 
 Docker images do not bundle `boiler-writter` and cannot use the local Steam resolver unless you provide a working Steam client environment yourself.
 
-Install optional resolver dependencies as needed:
+When working from a local clone, install optional resolver dependencies as needed:
 
 ```bash
 pip install -e .[steam-boiler]
 pip install -e .[steam-login]
 ```
 
-## Install from pip
+## Install from GitHub
 
-Install the default CLI/runtime package:
+This project is not published to PyPI yet, so install it directly from the public GitHub repository:
 
 ```bash
-pip install cs-demo-downloader
+pip install git+https://github.com/WangChuDi/CS-Demo-Downloader.git
 ```
 
 Optional extras:
 
 ```bash
 # Steam official matchmaking resolver using local Steam + boiler-writter parser deps
-pip install "cs-demo-downloader[steam-boiler]"
+pip install "cs-demo-downloader[steam-boiler] @ git+https://github.com/WangChuDi/CS-Demo-Downloader.git"
 
 # Steam official matchmaking resolver using steam-login/csgo GC deps
-pip install "cs-demo-downloader[steam-login]"
+pip install "cs-demo-downloader[steam-login] @ git+https://github.com/WangChuDi/CS-Demo-Downloader.git"
 ```
+
+After a future PyPI release, the package name will be installable with `pip install cs-demo-downloader`.
 
 For local development from this repository, use editable installs instead:
 

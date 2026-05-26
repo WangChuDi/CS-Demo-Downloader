@@ -353,4 +353,6 @@ The tests are local and deterministic. They do not require real 5EPlay/PWA/Steam
 
 ## License
 
-MIT
+This project is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+
+If you believe any content in this project infringes your rights, please contact the maintainer by opening a GitHub issue or emailing `wangchudi666@gmail.com`.

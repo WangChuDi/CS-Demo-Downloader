@@ -351,6 +351,8 @@ python3 -m compileall src tests cli.py
 - Demo 是否可下载取决于上游平台接口和账号权限。
 - 本地配置、Demo 文件和下载产物不会提交到 git。
 
-## License
+## 许可证
 
-MIT
+本项目使用 MIT 许可证。详情见 [LICENSE](LICENSE)。
+
+如果你认为本项目中的任何内容侵犯了你的权益，请通过 GitHub issue 或邮件 `wangchudi666@gmail.com` 联系维护者。

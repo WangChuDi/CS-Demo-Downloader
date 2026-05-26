@@ -1,5 +1,5 @@
 {
-  "include": ["src", "tests", "cli.py", "main.py"],
+  "include": ["src", "tests", "cli.py"],
   "executionEnvironments": [
     {
       "root": "src",

@@ -118,10 +118,10 @@ The API returns the next share code after `knowncode`; the downloader can iterat
 
 Steam official matchmaking has two optional resolver backends:
 
-- `boiler`: desktop/local backend using `akiver/boiler-writter`. Steam must be running and logged in on the same machine. This avoids storing Steam passwords and is recommended for local CLI usage. Configure `steam_resolver.type = "boiler"`. Set `steam_resolver.auto_download = "true"` to download the latest boiler-writter release into the local cache automatically, or set `steam_resolver.executable_path` to a manually installed binary.
+- `boiler`: local-machine backend using `akiver/boiler-writter`. Steam must be running and logged in on the same machine. This avoids storing Steam passwords and is recommended for local CLI usage. Configure `steam_resolver.type = "boiler"`. Set `steam_resolver.auto_download = "true"` to download the latest boiler-writter release into the local cache automatically, or set `steam_resolver.executable_path` to a manually installed binary.
 - `steam-login`: headless backend using optional `steam`/`csgo` dependencies. It reads credentials only from environment variables such as `STEAM_GC_USERNAME` and `STEAM_GC_PASSWORD`; do not store Steam credentials in `config.json`. Live Steam login still requires a real account and cannot be verified by local unit tests.
 
-Docker images do not bundle `boiler-writter` and cannot use the desktop Steam resolver unless you provide a working Steam client environment yourself.
+Docker images do not bundle `boiler-writter` and cannot use the local Steam resolver unless you provide a working Steam client environment yourself.
 
 Install optional resolver dependencies as needed:
 

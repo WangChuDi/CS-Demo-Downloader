@@ -118,10 +118,10 @@ Steam API 会基于 `knowncode` 返回下一个 share code，下载器可以本�
 
 Steam 官匹提供两个 optional resolver 后端：
 
-- `boiler`：桌面/本机后端，调用 `akiver/boiler-writter`。要求本机 Steam 正在运行并已登录，不需要保存 Steam 密码，推荐本机 CLI 使用。配置 `steam_resolver.type = "boiler"`。设置 `steam_resolver.auto_download = "true"` 可自动下载最新 boiler-writter release 到本地缓存，也可以用 `steam_resolver.executable_path` 指向手动安装的 binary。
+- `boiler`：本机后端，调用 `akiver/boiler-writter`。要求本机 Steam 正在运行并已登录，不需要保存 Steam 密码，推荐本机 CLI 使用。配置 `steam_resolver.type = "boiler"`。设置 `steam_resolver.auto_download = "true"` 可自动下载最新 boiler-writter release 到本地缓存，也可以用 `steam_resolver.executable_path` 指向手动安装的 binary。
 - `steam-login`：面向无头环境的后端，使用 optional `steam`/`csgo` 依赖连接 Game Coordinator。凭据只从 `STEAM_GC_USERNAME`、`STEAM_GC_PASSWORD` 等环境变量读取，不要写入 `config.json`。真实 Steam 登录仍需要可用账号，无法通过本地单元测试验证。
 
-Docker 镜像不会内置 `boiler-writter`，也不能直接使用桌面 Steam resolver，除非你自己提供可用的 Steam 客户端环境。
+Docker 镜像不会内置 `boiler-writter`，也不能直接使用本机 Steam resolver，除非你自己提供可用的 Steam 客户端环境。
 
 按需安装 optional resolver 依赖：
 

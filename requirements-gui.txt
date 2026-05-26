@@ -1,3 +1,0 @@
-# GUI 额外依赖
--r requirements.txt
-PyQt5>=5.15.0

@@ -1,4 +1,4 @@
-name: Build Windows EXE
+name: Test Python Package
 
 on:
   push:
@@ -10,8 +10,12 @@ on:
   workflow_dispatch:  # 允许手动触发
 
 jobs:
-  build-windows:
-    runs-on: windows-latest
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
     
     steps:
     - uses: actions/checkout@v4
@@ -24,76 +28,17 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install -e .[gui]
-        pip install pyinstaller
-    
-    - name: Build EXE
-      run: |
-        pyinstaller --onefile --windowed --name="CS_Demo_Downloader" main.py
-    
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: CS_Demo_Downloader_Windows
-        path: dist/CS_Demo_Downloader.exe
-        if-no-files-found: error
+        pip install -e .
 
-  build-linux:
-    runs-on: ubuntu-latest
-    
-    steps:
-    - uses: actions/checkout@v4
-    
-    - name: Set up Python
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
-    
-    - name: Install system dependencies
+    - name: Run tests
       run: |
-        sudo apt-get update
-        sudo apt-get install -y libxcb-xinerama0 libxcb-cursor0
-    
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -e .[gui]
-        pip install pyinstaller
-    
-    - name: Build Linux binary
-      run: |
-        pyinstaller --onefile --name="CS_Demo_Downloader" main.py
-    
-    - name: Upload artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: CS_Demo_Downloader_Linux
-        path: dist/CS_Demo_Downloader
-        if-no-files-found: error
+        python -m unittest discover
 
-  release:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: [build-windows, build-linux]
-    runs-on: ubuntu-latest
-    
-    steps:
-    - name: Download Windows artifact
-      uses: actions/download-artifact@v4
-      with:
-        name: CS_Demo_Downloader_Windows
-        path: windows
-    
-    - name: Download Linux artifact
-      uses: actions/download-artifact@v4
-      with:
-        name: CS_Demo_Downloader_Linux
-        path: linux
-    
-    - name: Create Release
-      uses: softprops/action-gh-release@v1
-      with:
-        files: |
-          windows/CS_Demo_Downloader.exe
-          linux/CS_Demo_Downloader
-      env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    - name: Compile package
+      run: |
+        python -m compileall src tests cli.py
+
+    - name: Check CLI help
+      run: |
+        cs-demo-downloader --help
+        cs-demo-downloader download --help

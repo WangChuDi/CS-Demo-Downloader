@@ -16,7 +16,7 @@ keywords = ["cs2", "csgo", "counter-strike", "demo", "downloader", "5e", "pwa", 
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Environment :: Console",
-  "Intended Audience :: End Users/Desktop",
+  "Intended Audience :: Developers",
   "License :: OSI Approved :: MIT License",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.9",

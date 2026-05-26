@@ -1,6 +1,6 @@
 # CS Demo Downloader
 
-CS Demo Downloader downloads Counter-Strike demo files from supported Chinese CS platforms. It provides a PyQt5 desktop GUI, a scriptable CLI, and a Docker entrypoint for scheduled/server usage.
+CS Demo Downloader downloads Counter-Strike demo files from supported Chinese CS platforms. It provides a scriptable CLI, a Python API, and a Docker entrypoint for scheduled/server usage.
 
 [中文文档](README_CN.md)
 
@@ -19,7 +19,7 @@ No other platforms are implemented at the moment.
 ## Features
 
 - Download demos from 5EPlay, Perfect World Arena, and Steam official matchmaking.
-- Use either the desktop GUI or CLI automation.
+- Use CLI automation or import the Python API directly.
 - Docker image for server and scheduled downloads.
 - Automatically extracts downloaded ZIP and BZ2 demo archives.
 - Rejects unsafe ZIP entries that try to extract outside the target directory.
@@ -31,21 +31,18 @@ No other platforms are implemented at the moment.
 .
 ├── pyproject.toml         # Python package metadata
 ├── cli.py                 # Compatibility CLI wrapper
-├── main.py                # Compatibility GUI wrapper
 ├── src/cs_demo_downloader/ # Installable Python package
 ├── tests/                 # unittest test suite
 ├── Dockerfile
 ├── docker-compose.yml
 ├── config.json.example
-├── requirements.txt
-└── requirements-gui.txt
+└── requirements.txt
 ```
 
 ## Requirements
 
 - Python 3.11+ recommended.
 - CLI/runtime dependencies are declared in `pyproject.toml`. `requirements.txt` is kept for compatibility.
-- GUI dependencies are available through the `gui` optional extra.
 - Docker, if you want containerized execution.
 
 Use `python3` on Linux/macOS if `python` is not mapped to Python 3.
@@ -121,7 +118,7 @@ The API returns the next share code after `knowncode`; the downloader can iterat
 
 Steam official matchmaking has two optional resolver backends:
 
-- `boiler`: desktop/local backend using `akiver/boiler-writter`. Steam must be running and logged in on the same machine. This avoids storing Steam passwords and is recommended for GUI/local CLI usage. Configure `steam_resolver.type = "boiler"`. Set `steam_resolver.auto_download = "true"` to download the latest boiler-writter release into the local cache automatically, or set `steam_resolver.executable_path` to a manually installed binary.
+- `boiler`: desktop/local backend using `akiver/boiler-writter`. Steam must be running and logged in on the same machine. This avoids storing Steam passwords and is recommended for local CLI usage. Configure `steam_resolver.type = "boiler"`. Set `steam_resolver.auto_download = "true"` to download the latest boiler-writter release into the local cache automatically, or set `steam_resolver.executable_path` to a manually installed binary.
 - `steam-login`: headless backend using optional `steam`/`csgo` dependencies. It reads credentials only from environment variables such as `STEAM_GC_USERNAME` and `STEAM_GC_PASSWORD`; do not store Steam credentials in `config.json`. Live Steam login still requires a real account and cannot be verified by local unit tests.
 
 Docker images do not bundle `boiler-writter` and cannot use the desktop Steam resolver unless you provide a working Steam client environment yourself.
@@ -144,9 +141,6 @@ pip install cs-demo-downloader
 Optional extras:
 
 ```bash
-# Desktop GUI
-pip install "cs-demo-downloader[gui]"
-
 # Steam official matchmaking resolver using local Steam + boiler-writter parser deps
 pip install "cs-demo-downloader[steam-boiler]"
 
@@ -158,13 +152,11 @@ For local development from this repository, use editable installs instead:
 
 ```bash
 pip install -e .
-pip install -e ".[gui]"
 ```
 
-The package installs these console commands:
+The package installs this console command:
 
 - `cs-demo-downloader` - CLI downloader.
-- `cs-demo-downloader-gui` - PyQt5 desktop GUI, available when the `gui` extra is installed.
 
 ## CLI Usage
 
@@ -285,24 +277,6 @@ for user in config.get_users_pwa():
     print(user.name, user.steamid)
 ```
 
-## GUI Usage
-
-Install GUI dependencies and start the desktop app:
-
-```bash
-pip install -e .[gui]
-cs-demo-downloader-gui
-```
-
-The GUI lets you:
-
-- choose a download directory;
-- add/remove 5EPlay, PWA, and Steam official matchmaking users;
-- refresh demo lists;
-- download selected demos.
-
-The GUI uses the default config lookup path. If no config exists, it starts with an empty configuration so you can create one from the app.
-
 ## Docker Usage
 
 Build the image:
@@ -352,23 +326,6 @@ Example crontab entry for a daily 03:00 run:
 
 Make sure `/home/user/config/config.json` exists before scheduling the job.
 
-## Build Desktop Binaries
-
-Install GUI dependencies plus PyInstaller:
-
-```bash
-pip install -e .[gui]
-pip install pyinstaller
-```
-
-Build a single-file desktop executable:
-
-```bash
-pyinstaller --onefile --windowed --name="CS_Demo_Downloader" main.py
-```
-
-The artifact is written to `dist/`.
-
 ## Tests
 
 Run the local unittest suite:
@@ -380,7 +337,7 @@ python3 -m unittest discover
 Run a syntax/bytecode check:
 
 ```bash
-python3 -m compileall .
+python3 -m compileall src tests cli.py
 ```
 
 The tests are local and deterministic. They do not require real 5EPlay/PWA/Steam credentials or network access.

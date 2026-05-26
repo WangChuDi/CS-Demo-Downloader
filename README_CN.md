@@ -1,6 +1,6 @@
 # CS Demo Downloader 中文文档
 
-CS Demo Downloader 是一个用于下载 Counter-Strike Demo 文件的工具，当前支持 5E 和完美世界电竞平台。项目同时提供 PyQt5 图形界面、命令行模式和 Docker 运行方式，适合桌面使用或服务器定时下载。
+CS Demo Downloader 是一个用于下载 Counter-Strike Demo 文件的工具，当前支持 5E、完美世界电竞和 Steam 官匹。项目提供命令行模式、Python API 和 Docker 运行方式，适合本地脚本或服务器定时下载。
 
 [English README](README.md)
 
@@ -19,7 +19,7 @@ CS Demo Downloader 是一个用于下载 Counter-Strike Demo 文件的工具，�
 ## 功能特点
 
 - 支持下载 5E、完美世界电竞和 Steam 官匹 Demo。
-- 支持桌面 GUI 和 CLI 自动化脚本。
+- 支持 CLI 自动化脚本，也可以直接导入 Python API。
 - 支持 Docker，方便服务器或定时任务运行。
 - 自动解压下载到的 ZIP Demo 压缩包。
 - 会拒绝带有路径穿越风险的 ZIP 文件条目，避免解压到目标目录之外。
@@ -31,21 +31,18 @@ CS Demo Downloader 是一个用于下载 Counter-Strike Demo 文件的工具，�
 .
 ├── pyproject.toml         # Python 包元数据
 ├── cli.py                 # 兼容 CLI 包装入口
-├── main.py                # 兼容 GUI 包装入口
 ├── src/cs_demo_downloader/ # 可安装 Python 包
 ├── tests/                 # unittest 测试
 ├── Dockerfile
 ├── docker-compose.yml
 ├── config.json.example
-├── requirements.txt
-└── requirements-gui.txt
+└── requirements.txt
 ```
 
 ## 环境要求
 
 - 推荐 Python 3.11+。
 - CLI 依赖声明在 `pyproject.toml` 中，`requirements.txt` 仅保留兼容。
-- GUI 依赖通过 `gui` optional extra 安装。
 - Docker 运行需要本机安装 Docker。
 
 在 Linux/macOS 上，如果 `python` 不是 Python 3，请使用 `python3`。
@@ -121,7 +118,7 @@ Steam API 会基于 `knowncode` 返回下一个 share code，下载器可以本�
 
 Steam 官匹提供两个 optional resolver 后端：
 
-- `boiler`：桌面/本机后端，调用 `akiver/boiler-writter`。要求本机 Steam 正在运行并已登录，不需要保存 Steam 密码，推荐 GUI 和本机 CLI 使用。配置 `steam_resolver.type = "boiler"`。设置 `steam_resolver.auto_download = "true"` 可自动下载最新 boiler-writter release 到本地缓存，也可以用 `steam_resolver.executable_path` 指向手动安装的 binary。
+- `boiler`：桌面/本机后端，调用 `akiver/boiler-writter`。要求本机 Steam 正在运行并已登录，不需要保存 Steam 密码，推荐本机 CLI 使用。配置 `steam_resolver.type = "boiler"`。设置 `steam_resolver.auto_download = "true"` 可自动下载最新 boiler-writter release 到本地缓存，也可以用 `steam_resolver.executable_path` 指向手动安装的 binary。
 - `steam-login`：面向无头环境的后端，使用 optional `steam`/`csgo` 依赖连接 Game Coordinator。凭据只从 `STEAM_GC_USERNAME`、`STEAM_GC_PASSWORD` 等环境变量读取，不要写入 `config.json`。真实 Steam 登录仍需要可用账号，无法通过本地单元测试验证。
 
 Docker 镜像不会内置 `boiler-writter`，也不能直接使用桌面 Steam resolver，除非你自己提供可用的 Steam 客户端环境。
@@ -144,9 +141,6 @@ pip install cs-demo-downloader
 可选 extras：
 
 ```bash
-# 桌面 GUI
-pip install "cs-demo-downloader[gui]"
-
 # Steam 官匹：本机 Steam + boiler-writter parser 依赖
 pip install "cs-demo-downloader[steam-boiler]"
 
@@ -158,13 +152,11 @@ pip install "cs-demo-downloader[steam-login]"
 
 ```bash
 pip install -e .
-pip install -e ".[gui]"
 ```
 
-安装后会提供两个命令：
+安装后会提供这个命令：
 
 - `cs-demo-downloader`：命令行下载器。
-- `cs-demo-downloader-gui`：PyQt5 桌面 GUI，需要安装 `gui` extra。
 
 ## CLI 使用
 
@@ -285,24 +277,6 @@ for user in config.get_users_pwa():
     print(user.name, user.steamid)
 ```
 
-## GUI 使用
-
-安装 GUI 依赖并启动：
-
-```bash
-pip install -e .[gui]
-cs-demo-downloader-gui
-```
-
-GUI 支持：
-
-- 选择下载目录；
-- 添加/删除 5E、完美世界电竞和 Steam 官匹用户；
-- 刷新 Demo 列表；
-- 下载选中的 Demo。
-
-GUI 使用默认配置查找路径。如果没有配置文件，会以空配置启动，方便你在界面中添加账号。
-
 ## Docker 使用
 
 构建镜像：
@@ -352,23 +326,6 @@ docker compose run --rm cs-demo-downloader
 
 请确认 `/home/user/config/config.json` 已存在。
 
-## 打包桌面程序
-
-安装 GUI 依赖和 PyInstaller：
-
-```bash
-pip install -e .[gui]
-pip install pyinstaller
-```
-
-打包为单文件程序：
-
-```bash
-pyinstaller --onefile --windowed --name="CS_Demo_Downloader" main.py
-```
-
-产物会输出到 `dist/` 目录。
-
 ## 测试
 
 运行本地 unittest：
@@ -380,7 +337,7 @@ python3 -m unittest discover
 运行语法/字节码检查：
 
 ```bash
-python3 -m compileall .
+python3 -m compileall src tests cli.py
 ```
 
 测试不需要真实 5E/完美世界电竞/Steam 账号，也不会访问真实网络。

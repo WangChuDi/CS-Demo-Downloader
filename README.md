@@ -350,7 +350,15 @@ The bridge is Windows-only. Linux and macOS users should call the pure Python si
 
 ## Docker Usage
 
-Build the image:
+Use the published GitHub Container Registry image:
+
+```bash
+docker pull ghcr.io/wangchudi/cs-demo-downloader:latest
+```
+
+Images are published automatically when a `v*` Git tag is pushed or a GitHub Release is published. Release images are tagged as `latest`, the full semantic version such as `0.1.0`, and shorter version aliases such as `0.1` and `0` when applicable.
+
+You can also build the image locally from this repository:
 
 ```bash
 docker build -t cs-demo-downloader .
@@ -370,7 +378,7 @@ Run once:
 docker run --rm \
   -v "$(pwd)/config:/config" \
   -v "$(pwd)/demos:/demos" \
-  cs-demo-downloader
+  ghcr.io/wangchudi/cs-demo-downloader:latest
 ```
 
 The Docker entrypoint runs:
@@ -381,18 +389,29 @@ cs-demo-downloader download --all --config /config/config.jsonc --output /demos
 
 Because Docker uses an explicit config path, `/config/config.jsonc` must exist and be valid.
 
+The Linux container uses the pure Python PWA signing path. It does not use the Windows-only `PvpAlive.dll` bridge and does not include Wine or QEMU fallback. If you want to refresh a cached DLL for another Windows integration, mount a cache directory and run the updater explicitly:
+
+```bash
+docker run --rm \
+  -v "$(pwd)/cache:/cache" \
+  ghcr.io/wangchudi/cs-demo-downloader:latest \
+  update-pvpalive-dll --target /cache/PvpAlive.dll
+```
+
 ### Docker Compose
 
 ```bash
 docker compose run --rm cs-demo-downloader
 ```
 
+`docker-compose.yml` uses `ghcr.io/wangchudi/cs-demo-downloader:latest` by default and mounts `./config`, `./demos`, and `./cache`.
+
 ## Scheduled Downloads
 
 Example crontab entry for a daily 03:00 run:
 
 ```cron
-0 3 * * * docker run --rm -v /home/user/config:/config -v /home/user/demos:/demos cs-demo-downloader
+0 3 * * * docker run --rm -v /home/user/config:/config -v /home/user/demos:/demos ghcr.io/wangchudi/cs-demo-downloader:latest
 ```
 
 Make sure `/home/user/config/config.jsonc` exists before scheduling the job.

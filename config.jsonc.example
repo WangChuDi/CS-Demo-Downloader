@@ -1,0 +1,66 @@
+{
+  // Demo download directory. "." means the current working directory.
+  "download_path": ".",
+
+  "five_e": {
+    "users": [
+      {
+        // Display label only; not used by platform APIs.
+        "label": "example_5e_user",
+        "userid": "YOUR_5E_USERID_HERE"
+      }
+    ]
+  },
+
+  "pwa": {
+    // Shared token used by pwa.users entries that do not set access_token.
+    "default_access_token": "SHARED_PWA_ACCESS_TOKEN",
+    // Default signing path is pure Python on every platform.
+    // Windows users may explicitly call the packaged bridge with PvpAlive.dll if needed.
+    "signature_provider": "python",
+    // Optional cached DLL path for future explicit DLL-based integrations.
+    "pvp_alive_dll": "cache/PvpAlive.dll",
+    "users": [
+      {
+        "label": "pwa_target_1",
+        "steamid": "TARGET_STEAM_ID_1"
+      },
+      {
+        "label": "pwa_target_2",
+        "steamid": "TARGET_STEAM_ID_2"
+      },
+      {
+        "label": "pwa_target_with_custom_token",
+        "steamid": "TARGET_STEAM_ID_3",
+        "access_token": "OPTIONAL_TARGET_SPECIFIC_PWA_ACCESS_TOKEN"
+      }
+    ]
+  },
+
+  "steam": {
+    "users": [
+      {
+        "label": "example_steam_user",
+        "steamid": "YOUR_STEAM_ID64_HERE",
+        "api_key": "YOUR_STEAM_WEB_API_KEY_HERE",
+        "steamidkey": "YOUR_STEAM_ID_KEY_HERE",
+        "knowncode": "CSGO-xxxxx-xxxxx-xxxxx-xxxxx-xxxxx"
+      }
+    ],
+    "resolver": {
+      "type": "boiler",
+      "executable_path": "boiler-writter",
+      "auto_download": "true",
+      "cache_dir": "",
+      "timeout": "60"
+    },
+    "gc": {
+      "username_env": "STEAM_GC_USERNAME",
+      "password_env": "STEAM_GC_PASSWORD",
+      "two_factor_secret_env": "STEAM_GC_TWO_FACTOR_SECRET",
+      "auth_code_env": "STEAM_GC_AUTH_CODE",
+      "sentry_dir": "",
+      "timeout": "30"
+    }
+  }
+}

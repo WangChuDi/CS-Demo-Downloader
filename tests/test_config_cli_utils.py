@@ -1,7 +1,9 @@
 import bz2
 import hashlib
 import io
+import json
 import os
+import struct
 import tempfile
 import zipfile
 from pathlib import Path
@@ -17,6 +19,15 @@ from cs_demo_downloader.core.config import Config, ConfigLoadError, load_config
 from cs_demo_downloader.core.downloader_pwa import build_download_headers, get_demo_url, sign_demo_request
 from cs_demo_downloader.core.downloader_steam import decode_share_code, get_all_demo_urls, resolve_demo_url_from_share_code
 from cs_demo_downloader.core.utils import download_and_extract, download_file, redact_url, unzip_file
+from cs_demo_downloader.pwa_dll_updater import (
+    LatestClientInfo,
+    PvpAliveUpdateError,
+    download_zip_member_by_range,
+    fetch_latest_client_info,
+    fetch_latest_zip_url,
+    update_cached_pvp_alive_dll,
+)
+from cs_demo_downloader.pwa_bridge import PvpAliveBridgeError, call_pvp_alive_swap_data, get_pvp_alive_bridge_path
 
 
 class LoadConfigTests(unittest.TestCase):
@@ -49,7 +60,7 @@ class LoadConfigTests(unittest.TestCase):
                 config = load_config()
 
         self.assertIsInstance(config, Config)
-        self.assertEqual(config.download_path, '')
+        self.assertEqual(config.download_path, '.')
         self.assertEqual(config.steam_resolver, {})
         self.assertEqual(config.steam_gc, {})
         self.assertEqual(config.users_5e, [])
@@ -79,6 +90,65 @@ class LoadConfigTests(unittest.TestCase):
         self.assertEqual(1, len(users))
         self.assertEqual('steam_user', users[0].name)
         self.assertEqual('api-key', users[0].api_key)
+
+    def test_load_config_reads_jsonc_nested_schema_and_label(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = os.path.join(temp_dir, 'config.jsonc')
+            with open(config_path, 'w', encoding='utf-8') as config_file:
+                config_file.write('''{
+  // Download into the current working directory.
+  "download_path": ".",
+  "five_e": {
+    "users": [
+      {"label": "five-e-label", "userid": "5e-user"}
+    ]
+  },
+  "pwa": {
+    "default_access_token": "shared-token",
+    "users": [
+      {"label": "pwa-one", "steamid": "steam-1"},
+      {"label": "pwa-two", "steamid": "steam-2", "access_token": "override-token"}
+    ]
+  },
+  "steam": {
+    "users": [
+      {
+        "label": "steam-label",
+        "steamid": "76561198159976336",
+        "api_key": "api-key",
+        "steamidkey": "steamid-key",
+        "knowncode": "CSGO-abcde-abcde-abcde-abcde-abcde"
+      }
+    ],
+    "resolver": {"type": "boiler"},
+    "gc": {"timeout": "30"}
+  }
+}''')
+
+            config = load_config(config_path)
+
+        self.assertEqual('.', config.download_path)
+        self.assertEqual('five-e-label', config.get_users_5e()[0].label)
+        self.assertEqual('five-e-label', config.get_users_5e()[0].name)
+        pwa_users = config.get_users_pwa()
+        self.assertEqual('shared-token', pwa_users[0].access_token)
+        self.assertEqual('override-token', pwa_users[1].access_token)
+        self.assertEqual({'type': 'boiler'}, config.steam_resolver)
+        self.assertEqual({'timeout': '30'}, config.steam_gc)
+
+    def test_load_config_accepts_legacy_name_alias(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = os.path.join(temp_dir, 'config.json')
+            with open(config_path, 'w', encoding='utf-8') as config_file:
+                config_file.write('''{
+  "users_5e": [{"name": "legacy", "userid": "5e-user"}]
+}''')
+
+            config = load_config(config_path)
+
+        user = config.get_users_5e()[0]
+        self.assertEqual('legacy', user.label)
+        self.assertEqual('legacy', user.name)
 
 
 class CliTests(unittest.TestCase):
@@ -294,6 +364,210 @@ class PwaDownloaderTests(unittest.TestCase):
         )
         self.assertNotIn('secret-token', stdout.getvalue())
         self.assertIn('access_token=%3Credacted%3E', stdout.getvalue())
+
+
+class PvpAliveDllUpdaterTests(unittest.TestCase):
+    def test_fetch_latest_zip_url_uses_path_and_replaces_exe_suffix(self):
+        response = mock.MagicMock()
+        response.text = '''version: 1.0.0
+files:
+  - url: fallback.exe
+path: perfectworldarena_win32_v1.0.0.exe
+'''
+        response.raise_for_status.return_value = None
+
+        with mock.patch('cs_demo_downloader.pwa_dll_updater.requests.get', return_value=response):
+            zip_url = fetch_latest_zip_url('https://client.wmpvp.com/download/latest.yml', timeout=5)
+
+        self.assertEqual('https://client.wmpvp.com/download/perfectworldarena_win32_v1.0.0.zip', zip_url)
+
+    def test_fetch_latest_client_info_keeps_version_and_installer_path(self):
+        response = mock.MagicMock()
+        response.text = '''version: 1.0.0
+path: perfectworldarena_win32_v1.0.0.exe
+'''
+        response.raise_for_status.return_value = None
+
+        with mock.patch('cs_demo_downloader.pwa_dll_updater.requests.get', return_value=response):
+            info = fetch_latest_client_info('https://client.wmpvp.com/download/latest.yml', timeout=5)
+
+        self.assertEqual('1.0.0', info.version)
+        self.assertEqual('perfectworldarena_win32_v1.0.0.exe', info.installer_path)
+        self.assertEqual('https://client.wmpvp.com/download/perfectworldarena_win32_v1.0.0.zip', info.zip_url)
+
+    def test_fetch_latest_zip_url_rejects_non_exe(self):
+        response = mock.MagicMock()
+        response.text = 'path: client.zip\n'
+        response.raise_for_status.return_value = None
+
+        with mock.patch('cs_demo_downloader.pwa_dll_updater.requests.get', return_value=response):
+            with self.assertRaises(PvpAliveUpdateError) as ctx:
+                fetch_latest_zip_url('https://client.wmpvp.com/download/latest.yml')
+
+        self.assertIn('not an .exe', str(ctx.exception))
+
+    def test_download_zip_member_by_range_extracts_target_without_full_zip(self):
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, 'w', compression=zipfile.ZIP_DEFLATED) as zip_file:
+            zip_file.writestr('padding.bin', b'x' * 70000, compress_type=zipfile.ZIP_STORED)
+            zip_file.writestr('plugin/Other.dll', b'other')
+            zip_file.writestr('plugin/PvpAlive.dll', b'pvp-dll-bytes')
+        zip_bytes = zip_buffer.getvalue()
+        requested_ranges = []
+
+        head_response = mock.MagicMock()
+        head_response.headers = {'Content-Length': str(len(zip_bytes)), 'Accept-Ranges': 'bytes'}
+        head_response.raise_for_status.return_value = None
+
+        def fake_get(_url, headers=None, timeout=None):
+            request_headers = headers or {}
+            range_header = request_headers['Range']
+            requested_ranges.append(range_header)
+            start_text, end_text = range_header.removeprefix('bytes=').split('-', 1)
+            start = int(start_text)
+            end = int(end_text)
+            response = mock.MagicMock()
+            response.status_code = 206
+            response.content = zip_bytes[start:end + 1]
+            return response
+
+        with mock.patch('cs_demo_downloader.pwa_dll_updater.requests.head', return_value=head_response):
+            with mock.patch('cs_demo_downloader.pwa_dll_updater.requests.get', side_effect=fake_get):
+                data = download_zip_member_by_range('https://example.invalid/client.zip', timeout=5)
+
+        self.assertEqual(b'pvp-dll-bytes', data)
+        self.assertGreaterEqual(len(requested_ranges), 4)
+        self.assertNotIn(f'bytes=0-{len(zip_bytes) - 1}', requested_ranges)
+
+    def test_download_zip_member_by_range_reports_missing_target_choices(self):
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, 'w', compression=zipfile.ZIP_DEFLATED) as zip_file:
+            zip_file.writestr('plugin/Other.dll', b'other')
+        zip_bytes = zip_buffer.getvalue()
+
+        head_response = mock.MagicMock()
+        head_response.headers = {'Content-Length': str(len(zip_bytes))}
+        head_response.raise_for_status.return_value = None
+
+        def fake_get(_url, headers=None, timeout=None):
+            request_headers = headers or {}
+            start_text, end_text = request_headers['Range'].removeprefix('bytes=').split('-', 1)
+            response = mock.MagicMock()
+            response.status_code = 206
+            response.content = zip_bytes[int(start_text):int(end_text) + 1]
+            return response
+
+        with mock.patch('cs_demo_downloader.pwa_dll_updater.requests.head', return_value=head_response):
+            with mock.patch('cs_demo_downloader.pwa_dll_updater.requests.get', side_effect=fake_get):
+                with self.assertRaises(PvpAliveUpdateError) as ctx:
+                    download_zip_member_by_range('https://example.invalid/client.zip')
+
+        self.assertIn('plugin/Other.dll', str(ctx.exception))
+
+    def test_update_cached_pvp_alive_dll_writes_atomically(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            target_path = os.path.join(temp_dir, 'cache', 'PvpAlive.dll')
+            info = LatestClientInfo(
+                latest_yml_url='https://example.invalid/latest.yml',
+                version='1.0.0',
+                installer_path='client.exe',
+                zip_url='https://example.invalid/client.zip',
+            )
+            with mock.patch('cs_demo_downloader.pwa_dll_updater.fetch_latest_client_info', return_value=info):
+                with mock.patch('cs_demo_downloader.pwa_dll_updater.download_zip_member_by_range', return_value=b'dll'):
+                    result = update_cached_pvp_alive_dll(target_path=target_path)
+
+            self.assertEqual(target_path, result)
+            with open(target_path, 'rb') as dll_file:
+                self.assertEqual(b'dll', dll_file.read())
+            with open(target_path + '.json', 'r', encoding='utf-8') as metadata_file:
+                metadata = json.load(metadata_file)
+            self.assertEqual('1.0.0', metadata['version'])
+            self.assertEqual('client.exe', metadata['installer_path'])
+
+    def test_update_cached_pvp_alive_dll_skips_when_metadata_is_current(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            target_path = os.path.join(temp_dir, 'cache', 'PvpAlive.dll')
+            os.makedirs(os.path.dirname(target_path), exist_ok=True)
+            with open(target_path, 'wb') as dll_file:
+                dll_file.write(b'existing')
+            metadata = {
+                'latest_yml_url': 'https://example.invalid/latest.yml',
+                'version': '1.0.0',
+                'installer_path': 'client.exe',
+                'zip_url': 'https://example.invalid/client.zip',
+            }
+            with open(target_path + '.json', 'w', encoding='utf-8') as metadata_file:
+                json.dump(metadata, metadata_file)
+            info = LatestClientInfo(**metadata)
+
+            with mock.patch('cs_demo_downloader.pwa_dll_updater.fetch_latest_client_info', return_value=info):
+                with mock.patch('cs_demo_downloader.pwa_dll_updater.download_zip_member_by_range') as download:
+                    result = update_cached_pvp_alive_dll(target_path=target_path)
+
+            self.assertEqual(target_path, result)
+            download.assert_not_called()
+            with open(target_path, 'rb') as dll_file:
+                self.assertEqual(b'existing', dll_file.read())
+
+    def test_update_cached_pvp_alive_dll_force_ignores_current_metadata(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            target_path = os.path.join(temp_dir, 'cache', 'PvpAlive.dll')
+            os.makedirs(os.path.dirname(target_path), exist_ok=True)
+            with open(target_path, 'wb') as dll_file:
+                dll_file.write(b'existing')
+            metadata = {
+                'latest_yml_url': 'https://example.invalid/latest.yml',
+                'version': '1.0.0',
+                'installer_path': 'client.exe',
+                'zip_url': 'https://example.invalid/client.zip',
+            }
+            with open(target_path + '.json', 'w', encoding='utf-8') as metadata_file:
+                json.dump(metadata, metadata_file)
+            info = LatestClientInfo(**metadata)
+
+            with mock.patch('cs_demo_downloader.pwa_dll_updater.fetch_latest_client_info', return_value=info):
+                with mock.patch('cs_demo_downloader.pwa_dll_updater.download_zip_member_by_range', return_value=b'new') as download:
+                    result = update_cached_pvp_alive_dll(target_path=target_path, force=True)
+
+            self.assertEqual(target_path, result)
+            download.assert_called_once_with('https://example.invalid/client.zip', 'plugin/PvpAlive.dll', 30)
+            with open(target_path, 'rb') as dll_file:
+                self.assertEqual(b'new', dll_file.read())
+
+
+class PvpAliveBridgeTests(unittest.TestCase):
+    def test_get_pvp_alive_bridge_path_points_to_packaged_exe(self):
+        bridge_path = get_pvp_alive_bridge_path()
+
+        self.assertTrue(bridge_path.endswith(os.path.join('bin', 'pvp_alive_bridge.exe')))
+        self.assertTrue(os.path.isfile(bridge_path))
+
+    def test_bridge_rejects_non_windows_platform(self):
+        with mock.patch('cs_demo_downloader.pwa_bridge.platform.system', return_value='Linux'):
+            with self.assertRaises(PvpAliveBridgeError) as ctx:
+                call_pvp_alive_swap_data('/tmp/PvpAlive.dll', '{}')
+
+        self.assertIn('only supported on Windows', str(ctx.exception))
+
+    def test_bridge_invokes_packaged_exe_on_windows(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            dll_path = os.path.join(temp_dir, 'PvpAlive.dll')
+            bridge_path = os.path.join(temp_dir, 'pvp_alive_bridge.exe')
+            with open(dll_path, 'wb') as dll_file:
+                dll_file.write(b'dll')
+            with open(bridge_path, 'wb') as bridge_file:
+                bridge_file.write(b'exe')
+
+            completed = SimpleNamespace(returncode=0, stdout='signature\n', stderr='')
+            with mock.patch('cs_demo_downloader.pwa_bridge.platform.system', return_value='Windows'):
+                with mock.patch('cs_demo_downloader.pwa_bridge.subprocess.run', return_value=completed) as run:
+                    signature = call_pvp_alive_swap_data(dll_path, '{"a":1}', bridge_path=bridge_path, timeout=7)
+
+        self.assertEqual('signature', signature)
+        command = run.call_args.args[0]
+        self.assertEqual((bridge_path, dll_path, '{"a":1}'), command)
+        self.assertEqual(7, run.call_args.kwargs['timeout'])
 
 
 class Bz2DownloadTests(unittest.TestCase):

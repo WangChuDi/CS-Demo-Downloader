@@ -13,6 +13,7 @@ from .core.downloader_pwa import get_all_demo_urls as get_pwa_demos
 from .core.downloader_pwa import build_download_headers as build_pwa_download_headers
 from .core.downloader_steam import get_all_demo_urls as get_steam_demos
 from .core.utils import download_and_extract, redact_url
+from .pwa_dll_updater import LATEST_YML_URL, PvpAliveUpdateError, update_cached_pvp_alive_dll
 
 
 def print_progress(downloaded: int, total: int):
@@ -33,11 +34,11 @@ def download_5e_demos(config: Config):
         return
     
     for user in users:
-        print(f"\n=== Downloading 5E demos for {user.name} ===")
+        print(f"\n=== Downloading 5E demos for {user.label} ===")
         demo_urls = get_5e_demos(user.userid)
         
         if not demo_urls:
-            print(f"No demos found for {user.name}")
+            print(f"No demos found for {user.label}")
             continue
         
         print(f"Found {len(demo_urls)} demos")
@@ -56,11 +57,11 @@ def download_pwa_demos(config: Config):
         return
     
     for user in users:
-        print(f"\n=== Downloading PWA demos for {user.name} ===")
+        print(f"\n=== Downloading PWA demos for {user.label} ===")
         demo_urls = get_pwa_demos(user.steamid, user.access_token)
         
         if not demo_urls:
-            print(f"No demos found for {user.name}")
+            print(f"No demos found for {user.label}")
             continue
         
         print(f"Found {len(demo_urls)} demos")
@@ -70,7 +71,7 @@ def download_pwa_demos(config: Config):
             try:
                 headers = build_pwa_download_headers(user.steamid)
             except RuntimeError as e:
-                print(f"Unable to build PWA download headers for {user.name}: {e}", file=sys.stderr)
+                print(f"Unable to build PWA download headers for {user.label}: {e}", file=sys.stderr)
                 continue
             download_and_extract(demo_url, config.download_path, print_progress, headers=headers)
             print()  # 换行
@@ -122,7 +123,7 @@ def download_steam_demos(config: Config):
     demo_url_resolver = build_steam_demo_url_resolver(config)
 
     for user in users:
-        print(f"\n=== Downloading Steam official demos for {user.name} ===")
+        print(f"\n=== Downloading Steam official demos for {user.label} ===")
         demo_urls = get_steam_demos(
             user.api_key,
             user.steamid,
@@ -132,7 +133,7 @@ def download_steam_demos(config: Config):
         )
 
         if not demo_urls:
-            print(f"No demos found for {user.name}")
+            print(f"No demos found for {user.label}")
             continue
 
         print(f"Found {len(demo_urls)} demos")
@@ -167,6 +168,32 @@ def main():
     download_parser.add_argument(
         '--output', type=str,
         help='下载目录（覆盖配置文件中的设置）'
+    )
+
+    pvp_alive_parser = subparsers.add_parser(
+        'update-pvpalive-dll',
+        help='通过 HTTP Range 从官方客户端 ZIP 提取并缓存 PvpAlive.dll'
+    )
+    pvp_alive_parser.add_argument(
+        '--latest-yml-url',
+        default=LATEST_YML_URL,
+        help='官方 latest.yml URL'
+    )
+    pvp_alive_parser.add_argument(
+        '--target',
+        default=os.path.join('cache', 'PvpAlive.dll'),
+        help='目标缓存 DLL 路径'
+    )
+    pvp_alive_parser.add_argument(
+        '--timeout',
+        type=int,
+        default=30,
+        help='网络请求超时时间（秒）'
+    )
+    pvp_alive_parser.add_argument(
+        '--force',
+        action='store_true',
+        help='即使缓存版本已是最新也强制重新下载 DLL'
     )
     
     args = parser.parse_args()
@@ -208,6 +235,20 @@ def main():
             download_steam_demos(config)
         
         print("\n=== Download complete ===")
+        return 0
+    elif args.command == 'update-pvpalive-dll':
+        try:
+            dll_path = update_cached_pvp_alive_dll(
+                latest_yml_url=args.latest_yml_url,
+                target_path=args.target,
+                timeout=args.timeout,
+                force=args.force,
+            )
+        except PvpAliveUpdateError as e:
+            print(f"Error updating PvpAlive.dll: {e}", file=sys.stderr)
+            return 1
+
+        print(f"Updated PvpAlive.dll: {dll_path}")
         return 0
     else:
         parser.print_help()

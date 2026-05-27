@@ -35,7 +35,7 @@ No other platforms are implemented at the moment.
 ├── tests/                 # unittest test suite
 ├── Dockerfile
 ├── docker-compose.yml
-├── config.json.example
+├── config.jsonc.example
 └── requirements.txt
 ```
 
@@ -49,41 +49,76 @@ Use `python3` on Linux/macOS if `python` is not mapped to Python 3.
 
 ## Configuration
 
-Copy the example config and fill in your account information:
+Copy the JSONC example config and fill in your account information:
 
 ```bash
-cp config.json.example config.json
+cp config.jsonc.example config.jsonc
 ```
 
 Example schema:
 
-```json
+```jsonc
 {
-  "download_path": "/demos",
-  "users_5e": [
-    {
-      "name": "example_user",
-      "userid": "YOUR_5E_USERID_HERE"
+  // "." downloads into the current working directory.
+  "download_path": ".",
+  "five_e": {
+    "users": [
+      {
+        "label": "example_5e_user", // Display-only label.
+        "userid": "YOUR_5E_USERID_HERE"
+      }
+    ]
+  },
+  "pwa": {
+    "default_access_token": "SHARED_PWA_ACCESS_TOKEN",
+    "signature_provider": "python",
+    "pvp_alive_dll": "cache/PvpAlive.dll",
+    "users": [
+      {
+        "label": "pwa_target_1",
+        "steamid": "TARGET_STEAM_ID_1"
+      },
+      {
+        "label": "pwa_target_2",
+        "steamid": "TARGET_STEAM_ID_2"
+      },
+      {
+        "label": "pwa_target_with_custom_token",
+        "steamid": "TARGET_STEAM_ID_3",
+        "access_token": "OPTIONAL_TARGET_SPECIFIC_PWA_ACCESS_TOKEN"
+      }
+    ]
+  },
+  "steam": {
+    "users": [
+      {
+        "label": "example_steam_user",
+        "steamid": "YOUR_STEAM_ID64_HERE",
+        "api_key": "YOUR_STEAM_WEB_API_KEY_HERE",
+        "steamidkey": "YOUR_STEAM_ID_KEY_HERE",
+        "knowncode": "CSGO-xxxxx-xxxxx-xxxxx-xxxxx-xxxxx"
+      }
+    ],
+    "resolver": {
+      "type": "boiler",
+      "executable_path": "boiler-writter",
+      "auto_download": "true",
+      "cache_dir": "",
+      "timeout": "60"
+    },
+    "gc": {
+      "username_env": "STEAM_GC_USERNAME",
+      "password_env": "STEAM_GC_PASSWORD",
+      "two_factor_secret_env": "STEAM_GC_TWO_FACTOR_SECRET",
+      "auth_code_env": "STEAM_GC_AUTH_CODE",
+      "sentry_dir": "",
+      "timeout": "30"
     }
-  ],
-  "users_pwa": [
-    {
-      "name": "example_user",
-      "steamid": "YOUR_STEAM_ID_HERE",
-      "access_token": "YOUR_ACCESS_TOKEN_HERE"
-    }
-  ],
-  "users_steam": [
-    {
-      "name": "example_user",
-      "steamid": "YOUR_STEAM_ID64_HERE",
-      "api_key": "YOUR_STEAM_WEB_API_KEY_HERE",
-      "steamidkey": "YOUR_STEAM_ID_KEY_HERE",
-      "knowncode": "CSGO-xxxxx-xxxxx-xxxxx-xxxxx-xxxxx"
-    }
-  ]
+  }
 }
 ```
+
+The loader accepts both the new nested JSONC schema and the previous `config.json` schema for backward compatibility. `label` replaces `name` as the clearer display-only field; old `name` values are still accepted when loading legacy configs.
 
 ### 5EPlay User ID
 
@@ -100,9 +135,11 @@ The `userid` value is `11814738gjdwn7`.
 1. Log in to the Perfect World Arena web page or client.
 2. Open browser developer tools.
 3. Inspect authenticated network requests or cookies.
-4. Fill `steamid` and `access_token` in `config.json`.
+4. Fill `pwa.default_access_token` and each target `steamid` in `config.jsonc`.
 
 PWA demo download links are now generated with the current signed query parameters and the downloader sends the required PWA request headers for the final file request. Tokens can expire. If PWA downloads stop working, refresh the token first.
+
+If one PWA access token can access multiple target Steam accounts, set it once as `pwa.default_access_token` and add one `pwa.users` entry per target `steamid`. A user-specific `access_token` can override the default for a single target.
 
 ### Steam Official Matchmaking Credentials
 
@@ -118,8 +155,8 @@ The API returns the next share code after `knowncode`; the downloader can iterat
 
 Steam official matchmaking has two optional resolver backends:
 
-- `boiler`: local-machine backend using `akiver/boiler-writter`. Steam must be running and logged in on the same machine. This avoids storing Steam passwords and is recommended for local CLI usage. Configure `steam_resolver.type = "boiler"`. Set `steam_resolver.auto_download = "true"` to download the latest boiler-writter release into the local cache automatically, or set `steam_resolver.executable_path` to a manually installed binary.
-- `steam-login`: headless backend using optional `steam`/`csgo` dependencies. It reads credentials only from environment variables such as `STEAM_GC_USERNAME` and `STEAM_GC_PASSWORD`; do not store Steam credentials in `config.json`. Live Steam login still requires a real account and cannot be verified by local unit tests.
+- `boiler`: local-machine backend using `akiver/boiler-writter`. Steam must be running and logged in on the same machine. This avoids storing Steam passwords and is recommended for local CLI usage. Configure `steam.resolver.type = "boiler"`. Set `steam.resolver.auto_download = "true"` to download the latest boiler-writter release into the local cache automatically, or set `steam.resolver.executable_path` to a manually installed binary.
+- `steam-login`: headless backend using optional `steam`/`csgo` dependencies. It reads credentials only from environment variables such as `STEAM_GC_USERNAME` and `STEAM_GC_PASSWORD`; do not store Steam credentials in your config file. Live Steam login still requires a real account and cannot be verified by local unit tests.
 
 Docker images do not bundle `boiler-writter` and cannot use the local Steam resolver unless you provide a working Steam client environment yourself.
 
@@ -172,31 +209,39 @@ cs-demo-downloader download --help
 Download all configured platforms:
 
 ```bash
-cs-demo-downloader download --all --config config.json
+cs-demo-downloader download --all --config config.jsonc
 ```
 
 Download only 5EPlay demos:
 
 ```bash
-cs-demo-downloader download --platform 5e --config config.json
+cs-demo-downloader download --platform 5e --config config.jsonc
 ```
 
 Download only Perfect World Arena demos:
 
 ```bash
-cs-demo-downloader download --platform pwa --config config.json
+cs-demo-downloader download --platform pwa --config config.jsonc
 ```
 
 Download only Steam official matchmaking demos:
 
 ```bash
-cs-demo-downloader download --platform steam --config config.json
+cs-demo-downloader download --platform steam --config config.jsonc
 ```
+
+Update the cached PWA `PvpAlive.dll` explicitly without downloading the full official client ZIP:
+
+```bash
+cs-demo-downloader update-pvpalive-dll --target cache/PvpAlive.dll
+```
+
+This command reads the official `latest.yml`, derives the matching ZIP URL, uses HTTP Range requests to fetch only the ZIP tail, central directory, local header, and compressed `plugin/PvpAlive.dll` data, validates size and CRC32, then atomically replaces the target cache file. It writes version metadata next to the DLL as `PvpAlive.dll.json`; if the cached metadata already matches the latest client, the DLL data is not downloaded again. Pass `--force` to refresh anyway. It does not modify the installed Perfect World Arena client and is not used by the normal Python signing path unless you explicitly call it.
 
 Override the configured download directory:
 
 ```bash
-cs-demo-downloader download --all --config config.json --output ./demos
+cs-demo-downloader download --all --config config.jsonc --output ./demos
 ```
 
 When `--config` is provided explicitly, the CLI exits with a non-zero status if that file is missing or invalid. This is intentional so Docker, cron, and other automation can detect configuration problems.
@@ -269,15 +314,39 @@ demo_urls = get_all_demo_urls(
 
 ### Config helpers
 
-To reuse the same JSON config file as the CLI:
+To reuse the same JSONC config file as the CLI:
 
 ```python
 from cs_demo_downloader.core.config import load_config
 
-config = load_config("config.json")
+config = load_config("config.jsonc")
 for user in config.get_users_pwa():
-    print(user.name, user.steamid)
+    print(user.label, user.steamid)
 ```
+
+### PWA DLL cache updater
+
+The updater is available as a Python function if you need to refresh a cached `PvpAlive.dll` for a separate integration:
+
+```python
+from cs_demo_downloader.pwa_dll_updater import update_cached_pvp_alive_dll
+
+dll_path = update_cached_pvp_alive_dll(target_path="cache/PvpAlive.dll", force=False)
+print(dll_path)
+```
+
+The current downloader keeps using the existing pure Python signing implementation by default. Windows users who explicitly need the DLL fallback can call the packaged 32-bit bridge helper directly:
+
+```python
+from cs_demo_downloader.pwa_bridge import call_pvp_alive_swap_data
+
+signature = call_pvp_alive_swap_data(
+    dll_path="cache/PvpAlive.dll",
+    inner_json='{"your":"payload"}',
+)
+```
+
+The bridge is Windows-only. Linux and macOS users should call the pure Python signing functions directly; this project does not invoke Wine or QEMU.
 
 ## Docker Usage
 
@@ -291,8 +360,8 @@ Prepare mounted directories and config:
 
 ```bash
 mkdir -p config demos
-cp config.json.example config/config.json
-# Edit config/config.json before running the container.
+cp config.jsonc.example config/config.jsonc
+# Edit config/config.jsonc before running the container.
 ```
 
 Run once:
@@ -307,10 +376,10 @@ docker run --rm \
 The Docker entrypoint runs:
 
 ```bash
-cs-demo-downloader download --all --config /config/config.json --output /demos
+cs-demo-downloader download --all --config /config/config.jsonc --output /demos
 ```
 
-Because Docker uses an explicit config path, `/config/config.json` must exist and be valid.
+Because Docker uses an explicit config path, `/config/config.jsonc` must exist and be valid.
 
 ### Docker Compose
 
@@ -326,7 +395,7 @@ Example crontab entry for a daily 03:00 run:
 0 3 * * * docker run --rm -v /home/user/config:/config -v /home/user/demos:/demos cs-demo-downloader
 ```
 
-Make sure `/home/user/config/config.json` exists before scheduling the job.
+Make sure `/home/user/config/config.jsonc` exists before scheduling the job.
 
 ## Tests
 
@@ -350,6 +419,8 @@ The tests are local and deterministic. They do not require real 5EPlay/PWA/Steam
 - PWA access tokens may expire and must be refreshed manually.
 - Demo availability depends on the upstream platform APIs.
 - Downloaded files and local configs are intentionally ignored by git.
+- Cached `PvpAlive.dll` files under `cache/` or `vendor/PvpAlive/` are intentionally ignored by git and must not be committed.
+- A 32-bit Windows C++ bridge executable is packaged for explicit Windows-only DLL fallback use. Non-Windows platforms use the pure Python signing functions directly; Wine/QEMU fallback is intentionally not included.
 
 ## License
 

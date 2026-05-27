@@ -35,7 +35,7 @@ CS Demo Downloader 是一个用于下载 Counter-Strike Demo 文件的工具，�
 ├── tests/                 # unittest 测试
 ├── Dockerfile
 ├── docker-compose.yml
-├── config.json.example
+├── config.jsonc.example
 └── requirements.txt
 ```
 
@@ -49,41 +49,76 @@ CS Demo Downloader 是一个用于下载 Counter-Strike Demo 文件的工具，�
 
 ## 配置文件
 
-复制示例配置并填写账号信息：
+复制 JSONC 示例配置并填写账号信息：
 
 ```bash
-cp config.json.example config.json
+cp config.jsonc.example config.jsonc
 ```
 
 配置结构示例：
 
-```json
+```jsonc
 {
-  "download_path": "/demos",
-  "users_5e": [
-    {
-      "name": "example_user",
-      "userid": "YOUR_5E_USERID_HERE"
+  // "." 表示下载到当前运行目录。
+  "download_path": ".",
+  "five_e": {
+    "users": [
+      {
+        "label": "example_5e_user", // 仅用于日志显示。
+        "userid": "YOUR_5E_USERID_HERE"
+      }
+    ]
+  },
+  "pwa": {
+    "default_access_token": "SHARED_PWA_ACCESS_TOKEN",
+    "signature_provider": "python",
+    "pvp_alive_dll": "cache/PvpAlive.dll",
+    "users": [
+      {
+        "label": "pwa_target_1",
+        "steamid": "TARGET_STEAM_ID_1"
+      },
+      {
+        "label": "pwa_target_2",
+        "steamid": "TARGET_STEAM_ID_2"
+      },
+      {
+        "label": "pwa_target_with_custom_token",
+        "steamid": "TARGET_STEAM_ID_3",
+        "access_token": "OPTIONAL_TARGET_SPECIFIC_PWA_ACCESS_TOKEN"
+      }
+    ]
+  },
+  "steam": {
+    "users": [
+      {
+        "label": "example_steam_user",
+        "steamid": "YOUR_STEAM_ID64_HERE",
+        "api_key": "YOUR_STEAM_WEB_API_KEY_HERE",
+        "steamidkey": "YOUR_STEAM_ID_KEY_HERE",
+        "knowncode": "CSGO-xxxxx-xxxxx-xxxxx-xxxxx-xxxxx"
+      }
+    ],
+    "resolver": {
+      "type": "boiler",
+      "executable_path": "boiler-writter",
+      "auto_download": "true",
+      "cache_dir": "",
+      "timeout": "60"
+    },
+    "gc": {
+      "username_env": "STEAM_GC_USERNAME",
+      "password_env": "STEAM_GC_PASSWORD",
+      "two_factor_secret_env": "STEAM_GC_TWO_FACTOR_SECRET",
+      "auth_code_env": "STEAM_GC_AUTH_CODE",
+      "sentry_dir": "",
+      "timeout": "30"
     }
-  ],
-  "users_pwa": [
-    {
-      "name": "example_user",
-      "steamid": "YOUR_STEAM_ID_HERE",
-      "access_token": "YOUR_ACCESS_TOKEN_HERE"
-    }
-  ],
-  "users_steam": [
-    {
-      "name": "example_user",
-      "steamid": "YOUR_STEAM_ID64_HERE",
-      "api_key": "YOUR_STEAM_WEB_API_KEY_HERE",
-      "steamidkey": "YOUR_STEAM_ID_KEY_HERE",
-      "knowncode": "CSGO-xxxxx-xxxxx-xxxxx-xxxxx-xxxxx"
-    }
-  ]
+  }
 }
 ```
+
+配置加载器同时支持新的嵌套 JSONC schema 和旧版 `config.json` schema。`label` 取代 `name`，含义更明确：它只是日志里的显示名称；加载旧配置时仍兼容 `name`。
 
 ### 获取 5E User ID
 
@@ -100,9 +135,11 @@ https://www.5eplay.com/player/11814738gjdwn7
 1. 登录完美世界电竞网页版或客户端。
 2. 打开浏览器开发者工具。
 3. 在 Network 请求或 Cookie 中查找已登录请求。
-4. 将 `steamid` 和 `access_token` 填入 `config.json`。
+4. 将 `pwa.default_access_token` 和每个目标 `steamid` 填入 `config.jsonc`。
 
 PWA Demo 下载链接现在会使用当前签名参数生成，并在最终文件请求中发送必要的 PWA 请求头。Access Token 可能会过期。如果 PWA 下载突然不可用，优先刷新 token。
+
+如果一个 PWA access token 可以访问多个目标 Steam 账号，把它写在 `pwa.default_access_token`，然后为每个目标 `steamid` 添加一条 `pwa.users` 配置。单个目标也可以用自己的 `access_token` 覆盖默认 token。
 
 ### 获取 Steam 官匹参数
 
@@ -118,8 +155,8 @@ Steam API 会基于 `knowncode` 返回下一个 share code，下载器可以本�
 
 Steam 官匹提供两个 optional resolver 后端：
 
-- `boiler`：本机后端，调用 `akiver/boiler-writter`。要求本机 Steam 正在运行并已登录，不需要保存 Steam 密码，推荐本机 CLI 使用。配置 `steam_resolver.type = "boiler"`。设置 `steam_resolver.auto_download = "true"` 可自动下载最新 boiler-writter release 到本地缓存，也可以用 `steam_resolver.executable_path` 指向手动安装的 binary。
-- `steam-login`：面向无头环境的后端，使用 optional `steam`/`csgo` 依赖连接 Game Coordinator。凭据只从 `STEAM_GC_USERNAME`、`STEAM_GC_PASSWORD` 等环境变量读取，不要写入 `config.json`。真实 Steam 登录仍需要可用账号，无法通过本地单元测试验证。
+- `boiler`：本机后端，调用 `akiver/boiler-writter`。要求本机 Steam 正在运行并已登录，不需要保存 Steam 密码，推荐本机 CLI 使用。配置 `steam.resolver.type = "boiler"`。设置 `steam.resolver.auto_download = "true"` 可自动下载最新 boiler-writter release 到本地缓存，也可以用 `steam.resolver.executable_path` 指向手动安装的 binary。
+- `steam-login`：面向无头环境的后端，使用 optional `steam`/`csgo` 依赖连接 Game Coordinator。凭据只从 `STEAM_GC_USERNAME`、`STEAM_GC_PASSWORD` 等环境变量读取，不要写入配置文件。真实 Steam 登录仍需要可用账号，无法通过本地单元测试验证。
 
 Docker 镜像不会内置 `boiler-writter`，也不能直接使用本机 Steam resolver，除非你自己提供可用的 Steam 客户端环境。
 
@@ -172,31 +209,39 @@ cs-demo-downloader download --help
 下载所有已配置平台：
 
 ```bash
-cs-demo-downloader download --all --config config.json
+cs-demo-downloader download --all --config config.jsonc
 ```
 
 只下载 5E Demo：
 
 ```bash
-cs-demo-downloader download --platform 5e --config config.json
+cs-demo-downloader download --platform 5e --config config.jsonc
 ```
 
 只下载完美世界电竞 Demo：
 
 ```bash
-cs-demo-downloader download --platform pwa --config config.json
+cs-demo-downloader download --platform pwa --config config.jsonc
 ```
 
 只下载 Steam 官匹 Demo：
 
 ```bash
-cs-demo-downloader download --platform steam --config config.json
+cs-demo-downloader download --platform steam --config config.jsonc
 ```
+
+显式更新缓存的 PWA `PvpAlive.dll`，不会下载完整官方客户端 ZIP：
+
+```bash
+cs-demo-downloader update-pvpalive-dll --target cache/PvpAlive.dll
+```
+
+该命令会读取官方 `latest.yml`，推导对应 ZIP URL，通过 HTTP Range 只读取 ZIP 尾部、central directory、local header 和 `plugin/PvpAlive.dll` 的压缩数据，校验大小和 CRC32 后再原子替换目标缓存文件。它会在 DLL 旁边写入 `PvpAlive.dll.json` 版本元数据；如果缓存元数据已经对应最新版客户端，就不会再次下载 DLL 数据。需要强制刷新时传 `--force`。它不会修改官方客户端安装目录，也不会影响默认的纯 Python 签名流程，除非你显式调用。
 
 覆盖配置里的下载目录：
 
 ```bash
-cs-demo-downloader download --all --config config.json --output ./demos
+cs-demo-downloader download --all --config config.jsonc --output ./demos
 ```
 
 当显式传入 `--config` 时，如果该文件不存在或 JSON 格式错误，CLI 会输出错误并返回非零退出码。这是为了让 Docker、cron、CI 等自动化环境能及时发现配置问题。
@@ -269,15 +314,39 @@ demo_urls = get_all_demo_urls(
 
 ### 配置文件 helper
 
-如果想复用 CLI 的 JSON 配置文件：
+如果想复用 CLI 的 JSONC 配置文件：
 
 ```python
 from cs_demo_downloader.core.config import load_config
 
-config = load_config("config.json")
+config = load_config("config.jsonc")
 for user in config.get_users_pwa():
-    print(user.name, user.steamid)
+    print(user.label, user.steamid)
 ```
+
+### PWA DLL 缓存更新
+
+也可以在 Python 代码中显式调用更新函数：
+
+```python
+from cs_demo_downloader.pwa_dll_updater import update_cached_pvp_alive_dll
+
+dll_path = update_cached_pvp_alive_dll(target_path="cache/PvpAlive.dll", force=False)
+print(dll_path)
+```
+
+当前下载器默认仍使用现有纯 Python 签名实现。Windows 用户如果明确需要 DLL fallback，可以直接调用包内的 32 位 bridge helper：
+
+```python
+from cs_demo_downloader.pwa_bridge import call_pvp_alive_swap_data
+
+signature = call_pvp_alive_swap_data(
+    dll_path="cache/PvpAlive.dll",
+    inner_json='{"your":"payload"}',
+)
+```
+
+该 bridge 仅支持 Windows。Linux 和 macOS 用户应直接调用纯 Python 签名函数；本项目不会调用 Wine 或 QEMU。
 
 ## Docker 使用
 
@@ -291,8 +360,8 @@ docker build -t cs-demo-downloader .
 
 ```bash
 mkdir -p config demos
-cp config.json.example config/config.json
-# 运行前请编辑 config/config.json。
+cp config.jsonc.example config/config.jsonc
+# 运行前请编辑 config/config.jsonc。
 ```
 
 运行一次下载：
@@ -307,10 +376,10 @@ docker run --rm \
 Docker 默认入口命令等价于：
 
 ```bash
-cs-demo-downloader download --all --config /config/config.json --output /demos
+cs-demo-downloader download --all --config /config/config.jsonc --output /demos
 ```
 
-因为 Docker 使用显式配置路径，所以 `/config/config.json` 必须存在且格式正确。
+因为 Docker 使用显式配置路径，所以 `/config/config.jsonc` 必须存在且格式正确。
 
 ### Docker Compose
 
@@ -326,7 +395,7 @@ docker compose run --rm cs-demo-downloader
 0 3 * * * docker run --rm -v /home/user/config:/config -v /home/user/demos:/demos cs-demo-downloader
 ```
 
-请确认 `/home/user/config/config.json` 已存在。
+请确认 `/home/user/config/config.jsonc` 已存在。
 
 ## 测试
 
@@ -350,6 +419,8 @@ python3 -m compileall src tests cli.py
 - PWA access token 可能过期，需要手动刷新。
 - Demo 是否可下载取决于上游平台接口和账号权限。
 - 本地配置、Demo 文件和下载产物不会提交到 git。
+- `cache/` 或 `vendor/PvpAlive/` 下缓存的 `PvpAlive.dll` 会被 git 忽略，不应提交到仓库。
+- pip 包内包含 32 位 Windows C++ bridge exe，供 Windows 用户显式使用 DLL fallback。非 Windows 平台直接使用纯 Python 签名函数；项目不会内置 Wine/QEMU fallback。
 
 ## 许可证
 

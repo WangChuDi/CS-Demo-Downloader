@@ -1,0 +1,2 @@
+recursive-include src/cs_demo_downloader/bin *.exe
+recursive-include src/cs_demo_downloader/bin *.cpp

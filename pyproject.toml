@@ -58,6 +58,9 @@ cs-demo-downloader = "cs_demo_downloader.cli:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+cs_demo_downloader = ["bin/*.exe"]
+
 [tool.basedpyright]
 include = ["src", "tests", "cli.py"]
 extraPaths = ["src"]

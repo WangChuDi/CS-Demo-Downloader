@@ -350,7 +350,15 @@ signature = call_pvp_alive_swap_data(
 
 ## Docker 使用
 
-构建镜像：
+使用已发布到 GitHub Container Registry 的镜像：
+
+```bash
+docker pull ghcr.io/wangchudi/cs-demo-downloader:latest
+```
+
+当推送 `v*` Git tag 或发布 GitHub Release 时，GitHub Actions 会自动构建并发布镜像。Release 镜像会带有 `latest`、完整语义化版本号（例如 `0.1.0`）以及较短版本别名（例如 `0.1`、`0`，如适用）。
+
+也可以从本仓库本地构建镜像：
 
 ```bash
 docker build -t cs-demo-downloader .
@@ -370,7 +378,7 @@ cp config.jsonc.example config/config.jsonc
 docker run --rm \
   -v "$(pwd)/config:/config" \
   -v "$(pwd)/demos:/demos" \
-  cs-demo-downloader
+  ghcr.io/wangchudi/cs-demo-downloader:latest
 ```
 
 Docker 默认入口命令等价于：
@@ -381,18 +389,29 @@ cs-demo-downloader download --all --config /config/config.jsonc --output /demos
 
 因为 Docker 使用显式配置路径，所以 `/config/config.jsonc` 必须存在且格式正确。
 
+Linux 容器使用纯 Python PWA 签名路径，不会使用 Windows-only 的 `PvpAlive.dll` bridge，也不会内置 Wine/QEMU fallback。如果你只是想为其他 Windows 集成刷新缓存 DLL，可以挂载 cache 目录并显式运行 updater：
+
+```bash
+docker run --rm \
+  -v "$(pwd)/cache:/cache" \
+  ghcr.io/wangchudi/cs-demo-downloader:latest \
+  update-pvpalive-dll --target /cache/PvpAlive.dll
+```
+
 ### Docker Compose
 
 ```bash
 docker compose run --rm cs-demo-downloader
 ```
 
+`docker-compose.yml` 默认使用 `ghcr.io/wangchudi/cs-demo-downloader:latest`，并挂载 `./config`、`./demos` 和 `./cache`。
+
 ## 定时自动下载
 
 每天凌晨 3 点运行的 crontab 示例：
 
 ```cron
-0 3 * * * docker run --rm -v /home/user/config:/config -v /home/user/demos:/demos cs-demo-downloader
+0 3 * * * docker run --rm -v /home/user/config:/config -v /home/user/demos:/demos ghcr.io/wangchudi/cs-demo-downloader:latest
 ```
 
 请确认 `/home/user/config/config.jsonc` 已存在。

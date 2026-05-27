@@ -14,4 +14,4 @@ VOLUME ["/config", "/demos"]
 
 ENV DEMO_PATH=/demos
 
-ENTRYPOINT ["cs-demo-downloader", "download", "--all", "--config", "/config/config.json", "--output", "/demos"]
+ENTRYPOINT ["cs-demo-downloader", "download", "--all", "--config", "/config/config.jsonc", "--output", "/demos"]

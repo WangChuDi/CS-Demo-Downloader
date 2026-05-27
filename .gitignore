@@ -56,6 +56,9 @@ venv.bak/
 
 # Project specific
 config.json
+config.jsonc
+cache/
+vendor/PvpAlive/
 demos/
 *.dem
 *.zip

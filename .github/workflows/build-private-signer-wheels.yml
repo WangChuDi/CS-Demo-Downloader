@@ -20,7 +20,7 @@ env:
   PYTHONUTF8: "1"
   PYTHONIOENCODING: "utf-8"
   CIBW_BUILD: "cp39-* cp310-* cp311-* cp312-*"
-  CIBW_SKIP: "*-musllinux_* pp*"
+  CIBW_SKIP: "*-musllinux_*"
   CIBW_TEST_COMMAND: "python -c \"import cs_demo_pwa_signer; assert hasattr(cs_demo_pwa_signer, 'sign_demo_request'); assert hasattr(cs_demo_pwa_signer, 'build_x_pwa_signature')\""
   CIBW_BEFORE_ALL_LINUX: "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal"
   CIBW_ENVIRONMENT_LINUX: "PATH=$PATH:$HOME/.cargo/bin"

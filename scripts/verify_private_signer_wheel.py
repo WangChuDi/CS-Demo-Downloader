@@ -11,6 +11,13 @@ from typing import cast
 
 SOURCE_SUFFIXES = {'.py', '.pyx', '.c', '.cc', '.cpp', '.cxx', '.h', '.hpp', '.rs'}
 COMPILED_SUFFIXES = {'.so', '.pyd', '.dll', '.dylib'}
+PACKAGE_LOADER_PATH = 'cs_demo_pwa_signer/__init__.py'
+EXPECTED_PACKAGE_LOADER = '''from .cs_demo_pwa_signer import *
+
+__doc__ = cs_demo_pwa_signer.__doc__
+if hasattr(cs_demo_pwa_signer, "__all__"):
+    __all__ = cs_demo_pwa_signer.__all__
+'''
 
 
 def is_metadata_path(path: str) -> bool:
@@ -18,24 +25,32 @@ def is_metadata_path(path: str) -> bool:
     return any(part.endswith('.dist-info') for part in parts) or any(part.endswith('.data') for part in parts)
 
 
+def is_expected_package_loader(path: str, content: bytes) -> bool:
+    if path != PACKAGE_LOADER_PATH:
+        return False
+    text = content.decode('utf-8').replace('\r\n', '\n').rstrip('\n')
+    return text == EXPECTED_PACKAGE_LOADER.rstrip('\n')
+
+
 def verify_wheel(path: Path) -> list[str]:
     errors: list[str] = []
     with zipfile.ZipFile(path) as wheel:
         names = [name for name in wheel.namelist() if not name.endswith('/')]
+        if not any(Path(name).suffix in COMPILED_SUFFIXES for name in names):
+            errors.append('wheel does not contain a compiled extension artifact')
 
-    if not any(Path(name).suffix in COMPILED_SUFFIXES for name in names):
-        errors.append('wheel does not contain a compiled extension artifact')
-
-    for name in names:
-        suffix = Path(name).suffix
-        if suffix in SOURCE_SUFFIXES:
-            errors.append(f'source-like file included: {name}')
-            continue
-        if is_metadata_path(name):
-            continue
-        if suffix in COMPILED_SUFFIXES:
-            continue
-        errors.append(f'unexpected non-compiled payload: {name}')
+        for name in names:
+            suffix = Path(name).suffix
+            if suffix in SOURCE_SUFFIXES:
+                if suffix == '.py' and is_expected_package_loader(name, wheel.read(name)):
+                    continue
+                errors.append(f'source-like file included: {name}')
+                continue
+            if is_metadata_path(name):
+                continue
+            if suffix in COMPILED_SUFFIXES:
+                continue
+            errors.append(f'unexpected non-compiled payload: {name}')
 
     return errors
 

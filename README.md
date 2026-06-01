@@ -142,7 +142,7 @@ The `userid` value is `11814738gjdwn7`.
 
 PWA demo download links are now generated with the current signed query parameters and the downloader sends the required PWA request headers for the final file request. Tokens can expire. If PWA downloads stop working, refresh the token first.
 
-PWA signing is provided by the private compiled `cs-demo-pwa-signer` wheel. The public downloader repository does not include the signing algorithm source. Install the private wheel before using PWA downloads; see `docs/private-pwa-signer-wheel.md` for the required wheel contract and verification checklist.
+PWA signing is provided by the private compiled `cs-demo-pwa-signer` wheel. The public downloader repository does not include the signing algorithm source. The `s` parameter calculation was obtained through reverse-engineering work by Sisyphus; to reduce ongoing maintenance burden, it has been packaged into the wheel and does not affect normal downloader usage. Install the private wheel before using PWA downloads; see `docs/private-pwa-signer-wheel.md` for the required wheel contract and verification checklist. If another project wants to implement demo downloading without relying on this pip package, contact `wangchudi666@gmail.com`.
 
 If one PWA access token can access multiple target Steam accounts, set it once as `pwa.default_access_token` and add one `pwa.users` entry per target `steamid`. A user-specific `access_token` can override the default for a single target.
 
@@ -502,7 +502,7 @@ The tests are local and deterministic. They do not require real 5EPlay/PWA/Steam
 - Demo availability depends on the upstream platform APIs.
 - Downloaded files and local configs are intentionally ignored by git.
 - Cached `PvpAlive.dll` files under `cache/` or `vendor/PvpAlive/` are intentionally ignored by git and must not be committed.
-- PWA signing requires the private `cs-demo-pwa-signer` wheel. The public source tree must not contain the signer algorithm source or an sdist for that package.
+- PWA signing requires the private `cs-demo-pwa-signer` wheel. The public source tree must not contain the signer algorithm source or an sdist for that package. If another project wants to implement demo downloading without relying on this pip package, contact `wangchudi666@gmail.com`.
 - A 32-bit Windows C++ bridge executable is packaged for explicit DLL fallback use. Linux uses the private compiled signer by default; Wine is available only through the explicit `pvp_alive_wine` provider or `*-wine` Docker image. QEMU fallback is intentionally not included.
 
 ## License

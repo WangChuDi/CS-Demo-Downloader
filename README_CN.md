@@ -142,7 +142,7 @@ https://www.5eplay.com/player/11814738gjdwn7
 
 PWA Demo 下载链接现在会使用当前签名参数生成，并在最终文件请求中发送必要的 PWA 请求头。Access Token 可能会过期。如果 PWA 下载突然不可用，优先刷新 token。
 
-PWA 签名由私有编译 wheel `cs-demo-pwa-signer` 提供。公开 downloader 仓库不包含签名算法源码。使用 PWA 下载前需要先安装私有 wheel；wheel 的接口约定和发布前检查见 `docs/private-pwa-signer-wheel.md`。
+PWA 签名由私有编译 wheel `cs-demo-pwa-signer` 提供。公开 downloader 仓库不包含签名算法源码。`s` 参数计算算法是由 Sisyphus 逆向得到的；为了减轻后续维护压力，现已将其打包至 wheel 包中，不会影响正常下载使用。使用 PWA 下载前需要先安装私有 wheel；wheel 的接口约定和发布前检查见 `docs/private-pwa-signer-wheel.md`。如果有其他项目希望不使用当前 pip 包实现 demo 下载功能，可以联系 `wangchudi666@gmail.com`。
 
 如果一个 PWA access token 可以访问多个目标 Steam 账号，把它写在 `pwa.default_access_token`，然后为每个目标 `steamid` 添加一条 `pwa.users` 配置。单个目标也可以用自己的 `access_token` 覆盖默认 token。
 
@@ -502,7 +502,7 @@ python3 -m compileall src tests cli.py
 - Demo 是否可下载取决于上游平台接口和账号权限。
 - 本地配置、Demo 文件和下载产物不会提交到 git。
 - `cache/` 或 `vendor/PvpAlive/` 下缓存的 `PvpAlive.dll` 会被 git 忽略，不应提交到仓库。
-- PWA 签名需要私有 `cs-demo-pwa-signer` wheel。公开源码树不能包含 signer 算法源码，也不能发布该包的 sdist。
+- PWA 签名需要私有 `cs-demo-pwa-signer` wheel。公开源码树不能包含 signer 算法源码，也不能发布该包的 sdist。如果有其他项目希望不使用当前 pip 包实现 demo 下载功能，可以联系 `wangchudi666@gmail.com`。
 - pip 包内包含 32 位 Windows C++ bridge exe，供显式 DLL fallback 使用。Linux 默认使用私有编译 signer；只有显式使用 `pvp_alive_wine` provider 或 `*-wine` Docker 镜像时才会走 Wine。项目不会内置 QEMU fallback。
 
 ## 许可证

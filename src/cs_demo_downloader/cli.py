@@ -4,8 +4,10 @@ CS Demo Downloader - 命令行入口
 用于脚本和 Docker 自动化下载
 """
 import argparse
+import json
 import sys
 import os
+from typing import Callable
 
 from .core.config import load_config, Config, ConfigLoadError
 from .core.downloader_5e import get_all_demo_urls as get_5e_demos
@@ -14,6 +16,9 @@ from .core.downloader_pwa import build_download_headers as build_pwa_download_he
 from .core.downloader_steam import get_all_demo_urls as get_steam_demos
 from .core.utils import download_and_extract, redact_url
 from .pwa_dll_updater import LATEST_YML_URL, PvpAliveUpdateError, update_cached_pvp_alive_dll
+
+
+PwaDemoSigner = Callable[[str, str, str], str]
 
 
 def print_progress(downloaded: int, total: int):
@@ -58,7 +63,12 @@ def download_pwa_demos(config: Config):
     
     for user in users:
         print(f"\n=== Downloading PWA demos for {user.label} ===")
-        demo_urls = get_pwa_demos(user.steamid, user.access_token)
+        try:
+            signer = build_pwa_demo_url_signer(config)
+        except RuntimeError as e:
+            print(f"Unable to configure PWA signer for {user.label}: {e}", file=sys.stderr)
+            continue
+        demo_urls = get_pwa_demos(user.steamid, user.access_token, signer=signer)
         
         if not demo_urls:
             print(f"No demos found for {user.label}")
@@ -75,6 +85,56 @@ def download_pwa_demos(config: Config):
                 continue
             download_and_extract(demo_url, config.download_path, print_progress, headers=headers)
             print()  # 换行
+
+
+def build_pwa_demo_url_signer(config: Config) -> PwaDemoSigner | None:
+    pwa_config = config.pwa or {}
+    provider = pwa_config.get('signature_provider', 'compiled').strip().lower()
+    if provider in {'', 'compiled'}:
+        return None
+
+    dll_path = pwa_config.get('pvp_alive_dll', os.path.join('cache', 'PvpAlive.dll'))
+    bridge_path = pwa_config.get('pvp_alive_bridge_exe') or None
+    timeout = int(pwa_config.get('pvp_alive_timeout', '10'))
+
+    def build_inner_json(randnum: str, timestamp: str, data: str) -> str:
+        return json.dumps(
+            {'randnum': randnum, 'timestamp': timestamp, 'data': data},
+            separators=(',', ':'),
+            ensure_ascii=False,
+        )
+
+    if provider == 'pvp_alive_native':
+        from .pwa_bridge import call_pvp_alive_swap_data
+
+        def native_signer(randnum: str, timestamp: str, data: str) -> str:
+            return call_pvp_alive_swap_data(
+                dll_path=dll_path,
+                inner_json=build_inner_json(randnum, timestamp, data),
+                bridge_path=bridge_path,
+                timeout=timeout,
+            )
+
+        return native_signer
+
+    if provider == 'pvp_alive_wine':
+        from .pwa_bridge import call_pvp_alive_swap_data_wine
+
+        wine_binary = pwa_config.get('pvp_alive_wine_executable') or 'wine'
+
+        def wine_signer(randnum: str, timestamp: str, data: str) -> str:
+            return call_pvp_alive_swap_data_wine(
+                dll_path=dll_path,
+                inner_json=build_inner_json(randnum, timestamp, data),
+                bridge_path=bridge_path,
+                timeout=timeout,
+                wine_binary=wine_binary,
+            )
+
+        return wine_signer
+
+    message = f"Unsupported PWA signature_provider '{provider}'. Use 'compiled', 'pvp_alive_native', or 'pvp_alive_wine'."
+    raise RuntimeError(message)
 
 
 def build_steam_demo_url_resolver(config: Config):

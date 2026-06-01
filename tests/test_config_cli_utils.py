@@ -16,7 +16,13 @@ import requests
 
 from cs_demo_downloader import cli
 from cs_demo_downloader.core.config import Config, ConfigLoadError, load_config
-from cs_demo_downloader.core.downloader_pwa import build_download_headers, get_demo_url, sign_demo_request
+from cs_demo_downloader.core.downloader_pwa import (
+    PwaSignerUnavailableError,
+    build_download_headers,
+    get_all_demo_urls as get_pwa_demo_urls,
+    get_demo_url,
+    sign_demo_request,
+)
 from cs_demo_downloader.core.downloader_steam import decode_share_code, get_all_demo_urls, resolve_demo_url_from_share_code
 from cs_demo_downloader.core.utils import download_and_extract, download_file, redact_url, unzip_file
 from cs_demo_downloader.pwa_dll_updater import (
@@ -27,7 +33,12 @@ from cs_demo_downloader.pwa_dll_updater import (
     fetch_latest_zip_url,
     update_cached_pvp_alive_dll,
 )
-from cs_demo_downloader.pwa_bridge import PvpAliveBridgeError, call_pvp_alive_swap_data, get_pvp_alive_bridge_path
+from cs_demo_downloader.pwa_bridge import (
+    PvpAliveBridgeError,
+    call_pvp_alive_swap_data,
+    call_pvp_alive_swap_data_wine,
+    get_pvp_alive_bridge_path,
+)
 
 
 class LoadConfigTests(unittest.TestCase):
@@ -566,7 +577,7 @@ class PvpAliveBridgeTests(unittest.TestCase):
             with self.assertRaises(PvpAliveBridgeError) as ctx:
                 call_pvp_alive_swap_data('/tmp/PvpAlive.dll', '{}')
 
-        self.assertIn('only supported on Windows', str(ctx.exception))
+        self.assertIn('allow_wine=True', str(ctx.exception))
 
     def test_bridge_invokes_packaged_exe_on_windows(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -586,6 +597,116 @@ class PvpAliveBridgeTests(unittest.TestCase):
         command = run.call_args.args[0]
         self.assertEqual((bridge_path, dll_path, '{"a":1}'), command)
         self.assertEqual(7, run.call_args.kwargs['timeout'])
+
+    def test_bridge_invokes_wine_on_linux_when_explicitly_allowed(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            dll_path = os.path.join(temp_dir, 'PvpAlive.dll')
+            bridge_path = os.path.join(temp_dir, 'pvp_alive_bridge.exe')
+            with open(dll_path, 'wb') as dll_file:
+                dll_file.write(b'dll')
+            with open(bridge_path, 'wb') as bridge_file:
+                bridge_file.write(b'exe')
+
+            completed = SimpleNamespace(returncode=0, stdout='wine-signature\n', stderr='')
+            with mock.patch('cs_demo_downloader.pwa_bridge.platform.system', return_value='Linux'):
+                with mock.patch('cs_demo_downloader.pwa_bridge.shutil.which', return_value='/usr/bin/wine'):
+                    with mock.patch('cs_demo_downloader.pwa_bridge.subprocess.run', return_value=completed) as run:
+                        signature = call_pvp_alive_swap_data_wine(
+                            dll_path,
+                            '{"a":1}',
+                            bridge_path=bridge_path,
+                            timeout=9,
+                        )
+
+        self.assertEqual('wine-signature', signature)
+        command = run.call_args.args[0]
+        self.assertEqual(('/usr/bin/wine', bridge_path, dll_path, '{"a":1}'), command)
+        self.assertEqual(9, run.call_args.kwargs['timeout'])
+        self.assertEqual('-all', run.call_args.kwargs['env']['WINEDEBUG'])
+
+    def test_bridge_reports_missing_wine_binary(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            dll_path = os.path.join(temp_dir, 'PvpAlive.dll')
+            bridge_path = os.path.join(temp_dir, 'pvp_alive_bridge.exe')
+            with open(dll_path, 'wb') as dll_file:
+                dll_file.write(b'dll')
+            with open(bridge_path, 'wb') as bridge_file:
+                bridge_file.write(b'exe')
+
+            with mock.patch('cs_demo_downloader.pwa_bridge.platform.system', return_value='Linux'):
+                with mock.patch('cs_demo_downloader.pwa_bridge.shutil.which', return_value=None):
+                    with self.assertRaises(PvpAliveBridgeError) as ctx:
+                        call_pvp_alive_swap_data_wine(dll_path, '{}', bridge_path=bridge_path)
+
+        self.assertIn('Wine binary not found', str(ctx.exception))
+
+
+class PwaSignerSelectionTests(unittest.TestCase):
+    def test_get_demo_url_uses_custom_signer_when_provided(self):
+        def signer(randnum, timestamp, data):
+            self.assertTrue(randnum.isdigit())
+            self.assertTrue(timestamp.isdigit())
+            self.assertEqual('access_token=token&cup_id=0&match_id=match-1', data)
+            return 'custom-signature'
+
+        url = get_demo_url('match-1', 'token', signer=signer)
+
+        self.assertIn('s=custom-signature', url)
+
+    def test_get_all_demo_urls_passes_custom_signer(self):
+        with mock.patch('cs_demo_downloader.core.downloader_pwa.get_match_list', return_value=['m1']):
+            result = get_pwa_demo_urls('steamid', 'token', signer=lambda _r, _t, _d: 'sig')
+
+        self.assertTrue(result['m1'].startswith('https://pwaweblogin.wmpvp.com/csgo/demo/m1_0.dem?a=20000&r='))
+        self.assertIn('s=sig', result['m1'])
+
+    def test_build_pwa_demo_url_signer_defaults_to_compiled(self):
+        config = Config(pwa={'signature_provider': 'compiled'})
+
+        self.assertIsNone(cli.build_pwa_demo_url_signer(config))
+
+    def test_build_pwa_demo_url_signer_invokes_native_bridge(self):
+        config = Config(pwa={
+            'signature_provider': 'pvp_alive_native',
+            'pvp_alive_dll': '/cache/PvpAlive.dll',
+            'pvp_alive_bridge_exe': '/app/pvp_alive_bridge.exe',
+            'pvp_alive_timeout': '12',
+        })
+
+        with mock.patch('cs_demo_downloader.pwa_bridge.call_pvp_alive_swap_data', return_value='native-signature') as call:
+            signer = cli.build_pwa_demo_url_signer(config)
+            if signer is None:
+                self.fail('expected native signer')
+            signature = signer('123456', '1700000000', 'access_token=token&cup_id=0&match_id=m1')
+
+        self.assertEqual('native-signature', signature)
+        self.assertEqual('/cache/PvpAlive.dll', call.call_args.kwargs['dll_path'])
+        self.assertEqual('/app/pvp_alive_bridge.exe', call.call_args.kwargs['bridge_path'])
+        self.assertEqual(12, call.call_args.kwargs['timeout'])
+
+    def test_build_pwa_demo_url_signer_invokes_wine_bridge(self):
+        config = Config(pwa={
+            'signature_provider': 'pvp_alive_wine',
+            'pvp_alive_dll': '/cache/PvpAlive.dll',
+            'pvp_alive_wine_executable': '/usr/bin/wine',
+        })
+
+        with mock.patch('cs_demo_downloader.pwa_bridge.call_pvp_alive_swap_data_wine', return_value='wine-signature') as call:
+            signer = cli.build_pwa_demo_url_signer(config)
+            if signer is None:
+                self.fail('expected wine signer')
+            signature = signer('123456', '1700000000', 'access_token=token&cup_id=0&match_id=m1')
+
+        self.assertEqual('wine-signature', signature)
+        self.assertEqual('/usr/bin/wine', call.call_args.kwargs['wine_binary'])
+
+    def test_build_pwa_demo_url_signer_rejects_unknown_provider(self):
+        config = Config(pwa={'signature_provider': 'bad-provider'})
+
+        with self.assertRaises(RuntimeError) as ctx:
+            cli.build_pwa_demo_url_signer(config)
+
+        self.assertIn('Unsupported PWA signature_provider', str(ctx.exception))
 
 
 class Bz2DownloadTests(unittest.TestCase):

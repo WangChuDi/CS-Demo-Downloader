@@ -15,11 +15,17 @@
   "pwa": {
     // Shared token used by pwa.users entries that do not set access_token.
     "default_access_token": "SHARED_PWA_ACCESS_TOKEN",
-    // Default signing path is pure Python on every platform.
-    // Windows users may explicitly call the packaged bridge with PvpAlive.dll if needed.
-    "signature_provider": "python",
-    // Optional cached DLL path for future explicit DLL-based integrations.
+    // Default signing path uses the private compiled cs-demo-pwa-signer wheel.
+    // Optional explicit values:
+    // - "compiled": call the private compiled signer wheel.
+    // - "pvp_alive_native": call the packaged bridge directly on Windows.
+    // - "pvp_alive_wine": call the packaged bridge through Wine on Linux.
+    "signature_provider": "compiled",
+    // Used only when signature_provider is pvp_alive_native or pvp_alive_wine.
     "pvp_alive_dll": "cache/PvpAlive.dll",
+    "pvp_alive_bridge_exe": "",
+    "pvp_alive_wine_executable": "wine",
+    "pvp_alive_timeout": "10",
     "users": [
       {
         "label": "pwa_target_1",

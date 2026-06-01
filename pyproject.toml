@@ -26,7 +26,6 @@ classifiers = [
   "Topic :: Utilities"
 ]
 dependencies = [
-  "cryptography>=41.0.0",
   "requests>=2.28.0"
 ]
 
@@ -47,6 +46,9 @@ steam = [
   "csgo",
   "gevent"
 ]
+pwa-signer = [
+  "cs-demo-pwa-signer==0.1.0"
+]
 dev = [
   "build",
   "twine"
@@ -60,6 +62,9 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 cs_demo_downloader = ["bin/*.exe"]
+
+[tool.setuptools.exclude-package-data]
+cs_demo_downloader = ["bin/*.cpp"]
 
 [tool.basedpyright]
 include = ["src", "tests", "cli.py"]

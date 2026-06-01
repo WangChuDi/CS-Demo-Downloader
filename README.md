@@ -4,6 +4,20 @@ CS Demo Downloader downloads Counter-Strike demo files from supported Chinese CS
 
 [中文文档](README_CN.md)
 
+## Table of Contents
+
+- [Quick Start](#quick-start)
+- [Supported Platforms](#supported-platforms)
+- [Configuration](#configuration)
+- [Install from GitHub](#install-from-github)
+- [CLI Usage](#cli-usage)
+- [Docker Usage](#docker-usage)
+- [Python API Usage](#python-api-usage)
+- [Scheduled Downloads](#scheduled-downloads)
+- [Tests](#tests)
+- [Notes and Limitations](#notes-and-limitations)
+- [License](#license)
+
 ## Supported Platforms
 
 The current implementation supports three platforms:
@@ -25,7 +39,35 @@ No other platforms are implemented at the moment.
 - Rejects unsafe ZIP entries that try to extract outside the target directory.
 - Fails fast for explicit missing or malformed CLI config files.
 
+## Quick Start
+
+Use Docker if you want the simplest scheduled/server setup:
+
+```bash
+mkdir -p config demos
+cp config.jsonc.example config/config.jsonc
+# Edit config/config.jsonc before running the container.
+
+docker run --rm \
+  -v "$(pwd)/config:/config" \
+  -v "$(pwd)/demos:/demos" \
+  ghcr.io/wangchudi/cs-demo-downloader:latest
+```
+
+Use a local Python install if you want CLI/API development from a clone:
+
+```bash
+pip install "$(python scripts/select_private_signer_wheel.py wheelhouse)"
+pip install -e .
+cs-demo-downloader --help
+```
+
+PWA downloads require the private compiled `cs-demo-pwa-signer` wheel. Public tests mock that boundary.
+
 ## Project Layout
+
+<details>
+<summary>Repository layout</summary>
 
 ```text
 .
@@ -38,6 +80,8 @@ No other platforms are implemented at the moment.
 ├── config.jsonc.example
 └── requirements.txt
 ```
+
+</details>
 
 ## Requirements
 
@@ -54,6 +98,11 @@ Copy the JSONC example config and fill in your account information:
 ```bash
 cp config.jsonc.example config.jsonc
 ```
+
+The loader accepts both the new nested JSONC schema and the previous `config.json` schema for backward compatibility. `label` replaces `name` as the clearer display-only field; old `name` values are still accepted when loading legacy configs.
+
+<details>
+<summary>Full JSONC schema example</summary>
 
 Example schema:
 
@@ -121,7 +170,10 @@ Example schema:
 }
 ```
 
-The loader accepts both the new nested JSONC schema and the previous `config.json` schema for backward compatibility. `label` replaces `name` as the clearer display-only field; old `name` values are still accepted when loading legacy configs.
+</details>
+
+<details>
+<summary>Platform credential notes</summary>
 
 ### 5EPlay User ID
 
@@ -172,6 +224,8 @@ pip install -e .[steam-boiler]
 pip install -e .[steam-login]
 ```
 
+</details>
+
 ## Install from GitHub
 
 This project is not published to PyPI yet, so install it directly from the public GitHub repository:
@@ -214,6 +268,20 @@ The package installs this console command:
 - `cs-demo-downloader` - CLI downloader.
 
 ## CLI Usage
+
+Common commands:
+
+| Task | Command |
+| --- | --- |
+| Show help | `cs-demo-downloader --help` |
+| Download all configured platforms | `cs-demo-downloader download --all --config config.jsonc` |
+| Download 5EPlay only | `cs-demo-downloader download --platform 5e --config config.jsonc` |
+| Download PWA only | `cs-demo-downloader download --platform pwa --config config.jsonc` |
+| Download Steam only | `cs-demo-downloader download --platform steam --config config.jsonc` |
+| Refresh cached PWA DLL manually | `cs-demo-downloader update-pvpalive-dll --target cache/PvpAlive.dll` |
+
+<details>
+<summary>CLI command examples and notes</summary>
 
 Show help:
 
@@ -262,9 +330,14 @@ cs-demo-downloader download --all --config config.jsonc --output ./demos
 
 When `--config` is provided explicitly, the CLI exits with a non-zero status if that file is missing or invalid. This is intentional so Docker, cron, and other automation can detect configuration problems.
 
+</details>
+
 ## Python API Usage
 
 You can also use the installed package from your own Python scripts. The public modules are small function wrappers around each platform downloader plus the shared download/extract helpers.
+
+<details>
+<summary>Python examples</summary>
 
 ### 5EPlay
 
@@ -387,9 +460,18 @@ signature = call_pvp_alive_swap_data_wine(
 
 macOS users should use a macOS-compatible private signer wheel; this project does not include a macOS Wine/QEMU fallback.
 
+</details>
+
 ## Docker Usage
 
-Use the published GitHub Container Registry image without Wine:
+Published GitHub Container Registry images:
+
+| Image | Platforms | Notes |
+| --- | --- | --- |
+| `ghcr.io/wangchudi/cs-demo-downloader:latest` | `linux/amd64`, `linux/arm64` | Default image. Uses the private compiled signer wheel and does not include Wine. |
+| `ghcr.io/wangchudi/cs-demo-downloader:latest-wine` | `linux/amd64` | Wine-enabled image for explicit `pvp_alive_wine` DLL bridge use. |
+
+Pull the default image:
 
 ```bash
 docker pull ghcr.io/wangchudi/cs-demo-downloader:latest
@@ -404,6 +486,24 @@ docker pull ghcr.io/wangchudi/cs-demo-downloader:latest-wine
 ```
 
 The Wine image is currently built for `linux/amd64` only because the packaged PWA bridge is a 32-bit Windows executable.
+
+Run once with mounted config and output directories:
+
+```bash
+mkdir -p config demos
+cp config.jsonc.example config/config.jsonc
+# Edit config/config.jsonc before running the container.
+
+docker run --rm \
+  -v "$(pwd)/config:/config" \
+  -v "$(pwd)/demos:/demos" \
+  ghcr.io/wangchudi/cs-demo-downloader:latest
+```
+
+Because Docker uses an explicit config path, `/config/config.jsonc` must exist and be valid.
+
+<details>
+<summary>Local Docker builds, Wine image, and Compose</summary>
 
 You can also build the image locally from this repository:
 
@@ -436,8 +536,6 @@ The Docker entrypoint runs:
 cs-demo-downloader download --all --config /config/config.jsonc --output /demos
 ```
 
-Because Docker uses an explicit config path, `/config/config.jsonc` must exist and be valid.
-
 The default Linux container uses the private compiled signer wheel and does not include Wine. If you want to refresh a cached DLL, mount a cache directory and run the updater explicitly:
 
 ```bash
@@ -468,6 +566,8 @@ docker compose run --rm cs-demo-downloader
 ```bash
 docker compose --profile wine run --rm cs-demo-downloader-wine
 ```
+
+</details>
 
 ## Scheduled Downloads
 

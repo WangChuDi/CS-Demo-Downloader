@@ -71,8 +71,11 @@ Example schema:
   },
   "pwa": {
     "default_access_token": "SHARED_PWA_ACCESS_TOKEN",
-    "signature_provider": "python",
+    "signature_provider": "compiled",
     "pvp_alive_dll": "cache/PvpAlive.dll",
+    "pvp_alive_bridge_exe": "",
+    "pvp_alive_wine_executable": "wine",
+    "pvp_alive_timeout": "10",
     "users": [
       {
         "label": "pwa_target_1",
@@ -139,6 +142,8 @@ The `userid` value is `11814738gjdwn7`.
 
 PWA demo download links are now generated with the current signed query parameters and the downloader sends the required PWA request headers for the final file request. Tokens can expire. If PWA downloads stop working, refresh the token first.
 
+PWA signing is provided by the private compiled `cs-demo-pwa-signer` wheel. The public downloader repository does not include the signing algorithm source. Install the private wheel before using PWA downloads; see `docs/private-pwa-signer-wheel.md` for the required wheel contract and verification checklist.
+
 If one PWA access token can access multiple target Steam accounts, set it once as `pwa.default_access_token` and add one `pwa.users` entry per target `steamid`. A user-specific `access_token` can override the default for a single target.
 
 ### Steam Official Matchmaking Credentials
@@ -190,8 +195,19 @@ After a future PyPI release, the package name will be installable with `pip inst
 For local development from this repository, use editable installs instead:
 
 ```bash
+pip install "$(python scripts/select_private_signer_wheel.py wheelhouse)"
 pip install -e .
 ```
+
+On Windows PowerShell:
+
+```powershell
+$wheel = python scripts/select_private_signer_wheel.py wheelhouse
+pip install $wheel
+pip install -e .
+```
+
+The private signer wheel is required only for real PWA signing. Public tests mock that boundary.
 
 The package installs this console command:
 
@@ -335,7 +351,19 @@ dll_path = update_cached_pvp_alive_dll(target_path="cache/PvpAlive.dll", force=F
 print(dll_path)
 ```
 
-The current downloader keeps using the existing pure Python signing implementation by default. Windows users who explicitly need the DLL fallback can call the packaged 32-bit bridge helper directly:
+The current downloader uses the private compiled signer wheel by default on every platform. If you explicitly need the DLL fallback, set `pwa.signature_provider` to one of these values:
+
+- `compiled`: default private compiled wheel signer; no DLL or Wine involved.
+- `pvp_alive_native`: call the packaged 32-bit bridge directly on Windows.
+- `pvp_alive_wine`: call the packaged 32-bit bridge through Wine on Linux.
+
+The DLL is never committed or bundled. Refresh it explicitly when needed:
+
+```bash
+cs-demo-downloader update-pvpalive-dll --target cache/PvpAlive.dll
+```
+
+Python users can also call the bridge helper directly:
 
 ```python
 from cs_demo_downloader.pwa_bridge import call_pvp_alive_swap_data
@@ -346,11 +374,22 @@ signature = call_pvp_alive_swap_data(
 )
 ```
 
-The bridge is Windows-only. Linux and macOS users should call the pure Python signing functions directly; this project does not invoke Wine or QEMU.
+Linux Wine usage is explicit:
+
+```python
+from cs_demo_downloader.pwa_bridge import call_pvp_alive_swap_data_wine
+
+signature = call_pvp_alive_swap_data_wine(
+    dll_path="cache/PvpAlive.dll",
+    inner_json='{"your":"payload"}',
+)
+```
+
+macOS users should use a macOS-compatible private signer wheel; this project does not include a macOS Wine/QEMU fallback.
 
 ## Docker Usage
 
-Use the published GitHub Container Registry image:
+Use the published GitHub Container Registry image without Wine:
 
 ```bash
 docker pull ghcr.io/wangchudi/cs-demo-downloader:latest
@@ -358,10 +397,20 @@ docker pull ghcr.io/wangchudi/cs-demo-downloader:latest
 
 Images are published automatically when a `v*` Git tag is pushed or a GitHub Release is published. Release images are tagged as `latest`, the full semantic version such as `0.1.0`, and shorter version aliases such as `0.1` and `0` when applicable.
 
+Wine-enabled images are published separately with a `-wine` suffix, for example:
+
+```bash
+docker pull ghcr.io/wangchudi/cs-demo-downloader:latest-wine
+```
+
+The Wine image is currently built for `linux/amd64` only because the packaged PWA bridge is a 32-bit Windows executable.
+
 You can also build the image locally from this repository:
 
 ```bash
-docker build -t cs-demo-downloader .
+cp /path/to/cs_demo_pwa_signer-0.1.0-*.whl wheelhouse/
+docker build --build-arg PYTHON_VERSION=3.12 -t cs-demo-downloader .
+docker build --build-arg PYTHON_VERSION=3.12 -f Dockerfile.wine -t cs-demo-downloader:wine .
 ```
 
 Prepare mounted directories and config:
@@ -389,7 +438,7 @@ cs-demo-downloader download --all --config /config/config.jsonc --output /demos
 
 Because Docker uses an explicit config path, `/config/config.jsonc` must exist and be valid.
 
-The Linux container uses the pure Python PWA signing path. It does not use the Windows-only `PvpAlive.dll` bridge and does not include Wine or QEMU fallback. If you want to refresh a cached DLL for another Windows integration, mount a cache directory and run the updater explicitly:
+The default Linux container uses the private compiled signer wheel and does not include Wine. If you want to refresh a cached DLL, mount a cache directory and run the updater explicitly:
 
 ```bash
 docker run --rm \
@@ -398,13 +447,27 @@ docker run --rm \
   update-pvpalive-dll --target /cache/PvpAlive.dll
 ```
 
+To use the Linux Wine bridge image, switch to the `-wine` tag and set the config to `"signature_provider": "pvp_alive_wine"` with `"pvp_alive_dll": "/cache/PvpAlive.dll"`:
+
+```bash
+docker run --rm \
+  -v "$(pwd)/config:/config" \
+  -v "$(pwd)/demos:/demos" \
+  -v "$(pwd)/cache:/cache" \
+  ghcr.io/wangchudi/cs-demo-downloader:latest-wine
+```
+
 ### Docker Compose
 
 ```bash
 docker compose run --rm cs-demo-downloader
 ```
 
-`docker-compose.yml` uses `ghcr.io/wangchudi/cs-demo-downloader:latest` by default and mounts `./config`, `./demos`, and `./cache`.
+`docker-compose.yml` uses `ghcr.io/wangchudi/cs-demo-downloader:latest` by default and mounts `./config`, `./demos`, and `./cache`. To run the Wine variant:
+
+```bash
+docker compose --profile wine run --rm cs-demo-downloader-wine
+```
 
 ## Scheduled Downloads
 
@@ -439,7 +502,8 @@ The tests are local and deterministic. They do not require real 5EPlay/PWA/Steam
 - Demo availability depends on the upstream platform APIs.
 - Downloaded files and local configs are intentionally ignored by git.
 - Cached `PvpAlive.dll` files under `cache/` or `vendor/PvpAlive/` are intentionally ignored by git and must not be committed.
-- A 32-bit Windows C++ bridge executable is packaged for explicit Windows-only DLL fallback use. Non-Windows platforms use the pure Python signing functions directly; Wine/QEMU fallback is intentionally not included.
+- PWA signing requires the private `cs-demo-pwa-signer` wheel. The public source tree must not contain the signer algorithm source or an sdist for that package.
+- A 32-bit Windows C++ bridge executable is packaged for explicit DLL fallback use. Linux uses the private compiled signer by default; Wine is available only through the explicit `pvp_alive_wine` provider or `*-wine` Docker image. QEMU fallback is intentionally not included.
 
 ## License
 

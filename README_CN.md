@@ -71,8 +71,11 @@ cp config.jsonc.example config.jsonc
   },
   "pwa": {
     "default_access_token": "SHARED_PWA_ACCESS_TOKEN",
-    "signature_provider": "python",
+    "signature_provider": "compiled",
     "pvp_alive_dll": "cache/PvpAlive.dll",
+    "pvp_alive_bridge_exe": "",
+    "pvp_alive_wine_executable": "wine",
+    "pvp_alive_timeout": "10",
     "users": [
       {
         "label": "pwa_target_1",
@@ -139,6 +142,8 @@ https://www.5eplay.com/player/11814738gjdwn7
 
 PWA Demo 下载链接现在会使用当前签名参数生成，并在最终文件请求中发送必要的 PWA 请求头。Access Token 可能会过期。如果 PWA 下载突然不可用，优先刷新 token。
 
+PWA 签名由私有编译 wheel `cs-demo-pwa-signer` 提供。公开 downloader 仓库不包含签名算法源码。使用 PWA 下载前需要先安装私有 wheel；wheel 的接口约定和发布前检查见 `docs/private-pwa-signer-wheel.md`。
+
 如果一个 PWA access token 可以访问多个目标 Steam 账号，把它写在 `pwa.default_access_token`，然后为每个目标 `steamid` 添加一条 `pwa.users` 配置。单个目标也可以用自己的 `access_token` 覆盖默认 token。
 
 ### 获取 Steam 官匹参数
@@ -190,8 +195,19 @@ pip install "cs-demo-downloader[steam-login] @ git+https://github.com/WangChuDi/
 如果是从本仓库源码本地开发，使用 editable install：
 
 ```bash
+pip install "$(python scripts/select_private_signer_wheel.py wheelhouse)"
 pip install -e .
 ```
+
+Windows PowerShell：
+
+```powershell
+$wheel = python scripts/select_private_signer_wheel.py wheelhouse
+pip install $wheel
+pip install -e .
+```
+
+私有 signer wheel 只在真实 PWA 签名时需要；公开测试会 mock 这个边界。
 
 安装后会提供这个命令：
 
@@ -335,7 +351,19 @@ dll_path = update_cached_pvp_alive_dll(target_path="cache/PvpAlive.dll", force=F
 print(dll_path)
 ```
 
-当前下载器默认仍使用现有纯 Python 签名实现。Windows 用户如果明确需要 DLL fallback，可以直接调用包内的 32 位 bridge helper：
+当前下载器在所有平台默认使用私有编译 signer wheel。如果明确需要 DLL fallback，可以把 `pwa.signature_provider` 设置为以下值之一：
+
+- `compiled`：默认私有编译 wheel 签名，不使用 DLL 或 Wine。
+- `pvp_alive_native`：Windows 上直接调用包内 32 位 bridge。
+- `pvp_alive_wine`：Linux 上通过 Wine 调用包内 32 位 bridge。
+
+DLL 不会提交到仓库或打进包内；需要时请显式刷新缓存：
+
+```bash
+cs-demo-downloader update-pvpalive-dll --target cache/PvpAlive.dll
+```
+
+Python 用户也可以直接调用 bridge helper：
 
 ```python
 from cs_demo_downloader.pwa_bridge import call_pvp_alive_swap_data
@@ -346,11 +374,22 @@ signature = call_pvp_alive_swap_data(
 )
 ```
 
-该 bridge 仅支持 Windows。Linux 和 macOS 用户应直接调用纯 Python 签名函数；本项目不会调用 Wine 或 QEMU。
+Linux Wine 用法必须显式调用：
+
+```python
+from cs_demo_downloader.pwa_bridge import call_pvp_alive_swap_data_wine
+
+signature = call_pvp_alive_swap_data_wine(
+    dll_path="cache/PvpAlive.dll",
+    inner_json='{"your":"payload"}',
+)
+```
+
+macOS 用户应直接调用纯 Python 签名函数；本项目不会内置 macOS Wine/QEMU fallback。
 
 ## Docker 使用
 
-使用已发布到 GitHub Container Registry 的镜像：
+使用已发布到 GitHub Container Registry 的无 Wine 默认镜像：
 
 ```bash
 docker pull ghcr.io/wangchudi/cs-demo-downloader:latest
@@ -358,10 +397,20 @@ docker pull ghcr.io/wangchudi/cs-demo-downloader:latest
 
 当推送 `v*` Git tag 或发布 GitHub Release 时，GitHub Actions 会自动构建并发布镜像。Release 镜像会带有 `latest`、完整语义化版本号（例如 `0.1.0`）以及较短版本别名（例如 `0.1`、`0`，如适用）。
 
+带 Wine 的镜像会使用单独的 `-wine` 后缀发布，例如：
+
+```bash
+docker pull ghcr.io/wangchudi/cs-demo-downloader:latest-wine
+```
+
+Wine 镜像目前只构建 `linux/amd64`，因为包内 PWA bridge 是 32 位 Windows exe。
+
 也可以从本仓库本地构建镜像：
 
 ```bash
-docker build -t cs-demo-downloader .
+cp /path/to/cs_demo_pwa_signer-0.1.0-*.whl wheelhouse/
+docker build --build-arg PYTHON_VERSION=3.12 -t cs-demo-downloader .
+docker build --build-arg PYTHON_VERSION=3.12 -f Dockerfile.wine -t cs-demo-downloader:wine .
 ```
 
 准备挂载目录和配置文件：
@@ -389,7 +438,7 @@ cs-demo-downloader download --all --config /config/config.jsonc --output /demos
 
 因为 Docker 使用显式配置路径，所以 `/config/config.jsonc` 必须存在且格式正确。
 
-Linux 容器使用纯 Python PWA 签名路径，不会使用 Windows-only 的 `PvpAlive.dll` bridge，也不会内置 Wine/QEMU fallback。如果你只是想为其他 Windows 集成刷新缓存 DLL，可以挂载 cache 目录并显式运行 updater：
+默认 Linux 容器使用私有编译 signer wheel，不包含 Wine。如果你只是想刷新缓存 DLL，可以挂载 cache 目录并显式运行 updater：
 
 ```bash
 docker run --rm \
@@ -398,13 +447,27 @@ docker run --rm \
   update-pvpalive-dll --target /cache/PvpAlive.dll
 ```
 
+如果要使用 Linux Wine bridge 镜像，请切换到 `-wine` tag，并在配置中设置 `"signature_provider": "pvp_alive_wine"` 和 `"pvp_alive_dll": "/cache/PvpAlive.dll"`：
+
+```bash
+docker run --rm \
+  -v "$(pwd)/config:/config" \
+  -v "$(pwd)/demos:/demos" \
+  -v "$(pwd)/cache:/cache" \
+  ghcr.io/wangchudi/cs-demo-downloader:latest-wine
+```
+
 ### Docker Compose
 
 ```bash
 docker compose run --rm cs-demo-downloader
 ```
 
-`docker-compose.yml` 默认使用 `ghcr.io/wangchudi/cs-demo-downloader:latest`，并挂载 `./config`、`./demos` 和 `./cache`。
+`docker-compose.yml` 默认使用 `ghcr.io/wangchudi/cs-demo-downloader:latest`，并挂载 `./config`、`./demos` 和 `./cache`。运行 Wine 变体：
+
+```bash
+docker compose --profile wine run --rm cs-demo-downloader-wine
+```
 
 ## 定时自动下载
 
@@ -439,7 +502,8 @@ python3 -m compileall src tests cli.py
 - Demo 是否可下载取决于上游平台接口和账号权限。
 - 本地配置、Demo 文件和下载产物不会提交到 git。
 - `cache/` 或 `vendor/PvpAlive/` 下缓存的 `PvpAlive.dll` 会被 git 忽略，不应提交到仓库。
-- pip 包内包含 32 位 Windows C++ bridge exe，供 Windows 用户显式使用 DLL fallback。非 Windows 平台直接使用纯 Python 签名函数；项目不会内置 Wine/QEMU fallback。
+- PWA 签名需要私有 `cs-demo-pwa-signer` wheel。公开源码树不能包含 signer 算法源码，也不能发布该包的 sdist。
+- pip 包内包含 32 位 Windows C++ bridge exe，供显式 DLL fallback 使用。Linux 默认使用私有编译 signer；只有显式使用 `pvp_alive_wine` provider 或 `*-wine` Docker 镜像时才会走 Wine。项目不会内置 QEMU fallback。
 
 ## 许可证
 

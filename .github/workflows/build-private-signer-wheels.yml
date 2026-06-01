@@ -1,0 +1,111 @@
+name: Build Private PWA Signer Wheels
+
+on:
+  workflow_dispatch:
+    inputs:
+      signer_ref:
+        description: Private signer repository ref to build
+        required: false
+        default: main
+      upload_release:
+        description: Attach wheels to the current tag release
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+
+env:
+  PYTHONUTF8: "1"
+  PYTHONIOENCODING: "utf-8"
+  CIBW_BUILD: "cp39-* cp310-* cp311-* cp312-*"
+  CIBW_SKIP: "*-musllinux_* pp*"
+  CIBW_TEST_COMMAND: "python -c \"import cs_demo_pwa_signer; assert hasattr(cs_demo_pwa_signer, 'sign_demo_request'); assert hasattr(cs_demo_pwa_signer, 'build_x_pwa_signature')\""
+  CIBW_BEFORE_ALL_LINUX: "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal"
+  CIBW_ENVIRONMENT_LINUX: "PATH=$PATH:$HOME/.cargo/bin"
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.name }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux
+            os: ubuntu-latest
+            cibw_archs: x86_64 aarch64
+          - name: windows-x64
+            os: windows-latest
+            cibw_archs: AMD64
+          - name: macos-intel
+            os: macos-13
+            cibw_archs: x86_64
+          - name: macos-arm64
+            os: macos-14
+            cibw_archs: arm64
+
+    steps:
+      - name: Check out downloader repository
+        uses: actions/checkout@v4
+        with:
+          path: downloader
+
+      - name: Validate private signer secrets
+        shell: bash
+        run: |
+          test -n "${{ secrets.PWA_SIGNER_REPOSITORY }}"
+          test -n "${{ secrets.PWA_SIGNER_REPOSITORY_TOKEN }}"
+
+      - name: Check out private signer repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ secrets.PWA_SIGNER_REPOSITORY }}
+          ref: ${{ inputs.signer_ref }}
+          token: ${{ secrets.PWA_SIGNER_REPOSITORY_TOKEN }}
+          path: signer
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Set up QEMU for Linux cross-architecture wheels
+        if: runner.os == 'Linux'
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cibuildwheel
+        run: python -m pip install --upgrade pip cibuildwheel
+
+      - name: Build signer wheels
+        env:
+          CIBW_ARCHS: ${{ matrix.cibw_archs }}
+        run: python -m cibuildwheel signer --output-dir wheelhouse
+
+      - name: Verify signer wheels contain no source
+        shell: bash
+        run: python downloader/scripts/verify_private_signer_wheel.py wheelhouse/*.whl
+
+      - name: Verify current runner can select a signer wheel
+        run: python downloader/scripts/select_private_signer_wheel.py wheelhouse
+
+      - name: Upload signer wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: cs-demo-pwa-signer-wheels-${{ matrix.name }}
+          path: wheelhouse/*.whl
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Attach wheels to GitHub release
+        if: ${{ inputs.upload_release == 'true' && startsWith(github.ref, 'refs/tags/') }}
+        uses: softprops/action-gh-release@v2
+        with:
+          files: wheelhouse/*.whl

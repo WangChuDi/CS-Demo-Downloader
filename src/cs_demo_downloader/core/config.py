@@ -16,6 +16,8 @@ class User5E:
     """5E 用户配置"""
     label: str
     userid: str
+    download_path: Optional[str] = None
+    scan_interval: Optional[str] = None
 
     @property
     def name(self) -> str:
@@ -28,6 +30,8 @@ class UserPWA:
     label: str
     steamid: str
     access_token: str
+    download_path: Optional[str] = None
+    scan_interval: Optional[str] = None
 
     @property
     def name(self) -> str:
@@ -42,6 +46,8 @@ class UserSteam:
     api_key: str
     steamidkey: str
     knowncode: str
+    download_path: Optional[str] = None
+    scan_interval: Optional[str] = None
 
     @property
     def name(self) -> str:
@@ -52,8 +58,12 @@ class UserSteam:
 class Config:
     """应用配置"""
     download_path: str = "."
+    download_path_override: bool = False
+    scan_interval: str = "300"
+    five_e: Dict[str, str] = field(default_factory=dict)
     steam_resolver: Dict[str, str] = field(default_factory=dict)
     steam_gc: Dict[str, str] = field(default_factory=dict)
+    steam: Dict[str, str] = field(default_factory=dict)
     pwa: Dict[str, str] = field(default_factory=dict)
     users_5e: List[Dict[str, str]] = field(default_factory=list)
     users_pwa: List[Dict[str, str]] = field(default_factory=list)
@@ -76,6 +86,36 @@ class Config:
     def get_users_steam(self) -> List[UserSteam]:
         """获取 Steam 官匹用户列表"""
         return [UserSteam(**u) for u in self.users_steam]
+
+    def get_platform_config(self, platform: str) -> Dict[str, str]:
+        if platform == '5e':
+            return self.five_e
+        if platform == 'pwa':
+            return self.pwa
+        if platform == 'steam':
+            return self.steam
+        return {}
+
+    def get_download_path(self, platform: str, user: Any) -> str:
+        if self.download_path_override:
+            return self.download_path
+        user_path = getattr(user, 'download_path', None)
+        if user_path:
+            return user_path
+        platform_path = self.get_platform_config(platform).get('download_path')
+        if platform_path:
+            return platform_path
+        return self.download_path
+
+    def get_scan_interval(self, platform: str, user: Optional[Any] = None) -> str:
+        if user is not None:
+            user_interval = getattr(user, 'scan_interval', None)
+            if user_interval:
+                return user_interval
+        platform_interval = self.get_platform_config(platform).get('scan_interval')
+        if platform_interval:
+            return platform_interval
+        return self.scan_interval
     
     def add_user_5e(self, label: str, userid: str):
         """添加 5E 用户"""
@@ -185,21 +225,48 @@ def strip_jsonc_comments(text: str) -> str:
 
 
 def _normalize_user_label(user: Dict[str, Any]) -> Dict[str, str]:
-    normalized = {str(key): str(value) for key, value in user.items() if value is not None}
+    normalized = {str(key).lower(): str(value) for key, value in user.items() if value is not None}
     if 'label' not in normalized and 'name' in normalized:
         normalized['label'] = normalized.pop('name')
     return normalized
 
 
+def _normalize_config_keys(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {str(key).lower(): _normalize_config_keys(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_normalize_config_keys(item) for item in value]
+    return value
+
+
+def _uppercase_config_keys(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {str(key).upper(): _uppercase_config_keys(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_uppercase_config_keys(item) for item in value]
+    return value
+
+
 def _normalize_config_data(data: Dict[str, Any]) -> Dict[str, Any]:
+    data = _normalize_config_keys(data)
     five_e = data.get('five_e', {}) or {}
     pwa = data.get('pwa', {}) or {}
     steam = data.get('steam', {}) or {}
 
+    five_e_config = {
+        str(key): str(value)
+        for key, value in five_e.items()
+        if key != 'users' and value is not None
+    }
     pwa_config = {
         str(key): str(value)
         for key, value in pwa.items()
         if key != 'users' and value is not None
+    }
+    steam_config = {
+        str(key): str(value)
+        for key, value in steam.items()
+        if key not in {'users', 'resolver', 'gc'} and value is not None
     }
 
     users_pwa = [_normalize_user_label(user) for user in pwa.get('users', data.get('users_pwa', []))]
@@ -210,8 +277,11 @@ def _normalize_config_data(data: Dict[str, Any]) -> Dict[str, Any]:
 
     return {
         'download_path': data.get('download_path', '.'),
+        'scan_interval': str(data.get('scan_interval', '300')),
+        'five_e': five_e_config,
         'steam_resolver': steam.get('resolver', data.get('steam_resolver', {})) or {},
         'steam_gc': steam.get('gc', data.get('steam_gc', {})) or {},
+        'steam': steam_config,
         'pwa': pwa_config,
         'users_5e': [_normalize_user_label(user) for user in five_e.get('users', data.get('users_5e', []))],
         'users_pwa': users_pwa,
@@ -270,14 +340,16 @@ def save_config(config: Config, config_path: Optional[str] = None):
         with open(config_path, 'w', encoding='utf-8') as f:
             data = {
                 'download_path': config.download_path,
-                'five_e': {'users': config.users_5e},
+                'scan_interval': config.scan_interval,
+                'five_e': {**config.five_e, 'users': config.users_5e},
                 'pwa': {**config.pwa, 'users': config.users_pwa},
                 'steam': {
+                    **config.steam,
                     'users': config.users_steam,
                     'resolver': config.steam_resolver,
                     'gc': config.steam_gc,
                 },
             }
-            json.dump(data, f, indent=2, ensure_ascii=False)
+            json.dump(_uppercase_config_keys(data), f, indent=2, ensure_ascii=False)
     except IOError as e:
         print(f"Error saving config: {e}")

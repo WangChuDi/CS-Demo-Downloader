@@ -10,9 +10,9 @@ The current implementation supports three platforms:
 
 | Platform | CLI value | Required account fields | Notes |
 | --- | --- | --- | --- |
-| 5EPlay | `5e` | `userid` | The user id is read from a 5E player profile URL. |
-| Perfect World Arena | `pwa` | `steamid`, `access_token` | Requires a valid Perfect World Arena web/client token. Demo URLs are signed before download. |
-| Steam official matchmaking | `steam` | `steamid`, `api_key`, `steamidkey`, `knowncode` | Implements Steam Web API share-code iteration. Real replay URL resolution still requires Steam Game Coordinator full match info. |
+| 5EPlay | `5e` | `USERID` | The user id is read from a 5E player profile URL. |
+| Perfect World Arena | `pwa` | `STEAMID`, `ACCESS_TOKEN` | Requires a valid Perfect World Arena web/client token. Demo URLs are signed before download. |
+| Steam official matchmaking | `steam` | `STEAMID`, `API_KEY`, `STEAMIDKEY`, `KNOWNCODE` | Implements Steam Web API share-code iteration. Real replay URL resolution still requires Steam Game Coordinator full match info. |
 
 No other platforms are implemented at the moment.
 
@@ -60,65 +60,58 @@ Example schema:
 ```jsonc
 {
   // "." downloads into the current working directory.
-  "download_path": ".",
-  "five_e": {
-    "users": [
+  "DOWNLOAD_PATH": ".",
+  // Parsed config for external schedulers/future scan loops; the CLI runs once.
+  "SCAN_INTERVAL": "300",
+  "FIVE_E": {
+    // Optional: "DOWNLOAD_PATH": "./demos/5e", "SCAN_INTERVAL": "180"
+    "USERS": [
       {
-        "label": "example_5e_user", // Display-only label.
-        "userid": "YOUR_5E_USERID_HERE"
+        "LABEL": "example_5e_user", // Display-only label.
+        "USERID": "YOUR_5E_USERID_HERE"
+        // Optional per-user overrides:
+        // "DOWNLOAD_PATH": "./demos/5e/example_5e_user",
+        // "SCAN_INTERVAL": "60"
       }
     ]
   },
-  "pwa": {
-    "default_access_token": "SHARED_PWA_ACCESS_TOKEN",
-    "signature_provider": "python",
-    "pvp_alive_dll": "cache/PvpAlive.dll",
-    "users": [
+  "PWA": {
+    "DEFAULT_ACCESS_TOKEN": "SHARED_PWA_ACCESS_TOKEN",
+    "SIGNATURE_PROVIDER": "native",
+    // Optional: "DOWNLOAD_PATH": "./demos/pwa", "SCAN_INTERVAL": "180"
+    "PVP_ALIVE_DLL": "cache/PvpAlive.dll",
+    // Empty means use the pvp_alive_bridge.exe installed inside the Python package.
+    "PVP_ALIVE_BRIDGE_EXE": "",
+    "PVP_ALIVE_WINE_EXECUTABLE": "wine",
+    "PVP_ALIVE_TIMEOUT": "10",
+    "USERS": [
       {
-        "label": "pwa_target_1",
-        "steamid": "TARGET_STEAM_ID_1"
+        "LABEL": "pwa_target_1",
+        "STEAMID": "TARGET_STEAM_ID_1"
+        // Optional per-user overrides:
+        // "DOWNLOAD_PATH": "./demos/pwa/pwa_target_1",
+        // "SCAN_INTERVAL": "60"
       },
       {
-        "label": "pwa_target_2",
-        "steamid": "TARGET_STEAM_ID_2"
+        "LABEL": "pwa_target_2",
+        "STEAMID": "TARGET_STEAM_ID_2"
       },
       {
-        "label": "pwa_target_with_custom_token",
-        "steamid": "TARGET_STEAM_ID_3",
-        "access_token": "OPTIONAL_TARGET_SPECIFIC_PWA_ACCESS_TOKEN"
+        "LABEL": "pwa_target_with_custom_token",
+        "STEAMID": "TARGET_STEAM_ID_3",
+        "ACCESS_TOKEN": "OPTIONAL_TARGET_SPECIFIC_PWA_ACCESS_TOKEN"
       }
     ]
   },
-  "steam": {
-    "users": [
-      {
-        "label": "example_steam_user",
-        "steamid": "YOUR_STEAM_ID64_HERE",
-        "api_key": "YOUR_STEAM_WEB_API_KEY_HERE",
-        "steamidkey": "YOUR_STEAM_ID_KEY_HERE",
-        "knowncode": "CSGO-xxxxx-xxxxx-xxxxx-xxxxx-xxxxx"
-      }
-    ],
-    "resolver": {
-      "type": "boiler",
-      "executable_path": "boiler-writter",
-      "auto_download": "true",
-      "cache_dir": "",
-      "timeout": "60"
-    },
-    "gc": {
-      "username_env": "STEAM_GC_USERNAME",
-      "password_env": "STEAM_GC_PASSWORD",
-      "two_factor_secret_env": "STEAM_GC_TWO_FACTOR_SECRET",
-      "auth_code_env": "STEAM_GC_AUTH_CODE",
-      "sentry_dir": "",
-      "timeout": "30"
-    }
-  }
+  // Steam official matchmaking is not complete as a simple out-of-box feature.
+  // Share-code iteration exists, but real replay URL resolution still requires
+  // a working Steam GC resolver setup. See config.jsonc.example for the commented block.
 }
 ```
 
-The loader accepts both the new nested JSONC schema and the previous `config.json` schema for backward compatibility. `label` replaces `name` as the clearer display-only field; old `name` values are still accepted when loading legacy configs.
+The loader accepts both the new nested JSONC schema and the previous `config.json` schema for backward compatibility. `LABEL` replaces `NAME` as the clearer display-only field; old `NAME` values are still accepted when loading legacy configs.
+
+`DOWNLOAD_PATH` can be set globally, under a platform, or under an individual user. The effective priority is CLI `--output` > user `DOWNLOAD_PATH` > platform `DOWNLOAD_PATH` > global `DOWNLOAD_PATH`. `SCAN_INTERVAL` follows user > platform > global priority, but the built-in CLI is still one-shot and does not sleep or poll by itself.
 
 ### 5EPlay User ID
 
@@ -128,34 +121,36 @@ Open a 5E player profile URL and use the profile id segment. For example:
 https://www.5eplay.com/player/11814738gjdwn7
 ```
 
-The `userid` value is `11814738gjdwn7`.
+The `USERID` value is `11814738gjdwn7`.
 
 ### Perfect World Arena Steam ID and Access Token
 
 1. Log in to the Perfect World Arena web page or client.
 2. Open browser developer tools.
 3. Inspect authenticated network requests or cookies.
-4. Fill `pwa.default_access_token` and each target `steamid` in `config.jsonc`.
+4. Fill `PWA.DEFAULT_ACCESS_TOKEN` and each target `STEAMID` in `config.jsonc`.
 
 PWA demo download links are now generated with the current signed query parameters and the downloader sends the required PWA request headers for the final file request. Tokens can expire. If PWA downloads stop working, refresh the token first.
 
-If one PWA access token can access multiple target Steam accounts, set it once as `pwa.default_access_token` and add one `pwa.users` entry per target `steamid`. A user-specific `access_token` can override the default for a single target.
+PWA signing is provided by the private native `cs-demo-pwa-signer` wheel. The public downloader repository does not include the signing algorithm source. Install the private wheel before using PWA downloads; see `docs/private-pwa-signer-wheel.md` for the required wheel contract and verification checklist.
+
+If one PWA access token can access multiple target Steam accounts, set it once as `PWA.DEFAULT_ACCESS_TOKEN` and add one `PWA.USERS` entry per target `STEAMID`. A user-specific `ACCESS_TOKEN` can override the default for a single target.
 
 ### Steam Official Matchmaking Credentials
 
 Steam official matchmaking support uses Valve's `ICSGOPlayers_730/GetNextMatchSharingCode/v1` Web API. You need:
 
-1. `steamid`: your SteamID64.
-2. `api_key`: a Steam Web API key from `https://steamcommunity.com/dev/apikey`.
-3. `steamidkey`: the match sharing authentication key shown by CS2/CS:GO.
-4. `knowncode`: one existing official matchmaking share code, used as the cursor for fetching newer matches.
-The API returns the next share code after `knowncode`; the downloader can iterate share codes locally. Steam does **not** expose the final replay URL through this Web API alone. A real `.dem.bz2` URL must be read from Steam Game Coordinator full match info, typically the match `map` field. Until a GC resolver is configured, the Steam platform will report that no real replay URL can be resolved instead of returning a fake download URL.
+1. `STEAMID`: your SteamID64.
+2. `API_KEY`: a Steam Web API key from `https://steamcommunity.com/dev/apikey`.
+3. `STEAMIDKEY`: the match sharing authentication key shown by CS2/CS:GO.
+4. `KNOWNCODE`: one existing official matchmaking share code, used as the cursor for fetching newer matches.
+The API returns the next share code after `KNOWNCODE`; the downloader can iterate share codes locally. Steam does **not** expose the final replay URL through this Web API alone. A real `.dem.bz2` URL must be read from Steam Game Coordinator full match info, typically the match `map` field. Until a GC resolver is configured, the Steam platform will report that no real replay URL can be resolved instead of returning a fake download URL.
 
 ### Steam Demo URL Resolvers
 
 Steam official matchmaking has two optional resolver backends:
 
-- `boiler`: local-machine backend using `akiver/boiler-writter`. Steam must be running and logged in on the same machine. This avoids storing Steam passwords and is recommended for local CLI usage. Configure `steam.resolver.type = "boiler"`. Set `steam.resolver.auto_download = "true"` to download the latest boiler-writter release into the local cache automatically, or set `steam.resolver.executable_path` to a manually installed binary.
+- `boiler`: local-machine backend using `akiver/boiler-writter`. Steam must be running and logged in on the same machine. This avoids storing Steam passwords and is recommended for local CLI usage. Configure `STEAM.RESOLVER.TYPE = "boiler"`. Set `STEAM.RESOLVER.AUTO_DOWNLOAD = "true"` to download the latest boiler-writter release into the local cache automatically, or set `STEAM.RESOLVER.EXECUTABLE_PATH` to a manually installed binary.
 - `steam-login`: headless backend using optional `steam`/`csgo` dependencies. It reads credentials only from environment variables such as `STEAM_GC_USERNAME` and `STEAM_GC_PASSWORD`; do not store Steam credentials in your config file. Live Steam login still requires a real account and cannot be verified by local unit tests.
 
 Docker images do not bundle `boiler-writter` and cannot use the local Steam resolver unless you provide a working Steam client environment yourself.
@@ -190,8 +185,19 @@ After a future PyPI release, the package name will be installable with `pip inst
 For local development from this repository, use editable installs instead:
 
 ```bash
+pip install "$(python scripts/select_private_signer_wheel.py wheelhouse)"
 pip install -e .
 ```
+
+On Windows PowerShell:
+
+```powershell
+$wheel = python scripts/select_private_signer_wheel.py wheelhouse
+pip install $wheel
+pip install -e .
+```
+
+The private signer wheel is required only for real PWA signing. Public tests mock that boundary.
 
 The package installs this console command:
 
@@ -265,7 +271,7 @@ for match_id, demo_url in demo_urls.items():
 
 ### Perfect World Arena / PWA
 
-PWA downloads need both the signed URL and the PWA download headers. Do not print or persist generated URLs because they contain `access_token`.
+PWA downloads need both the signed URL and the PWA download headers. Do not print or persist generated URLs because they contain `ACCESS_TOKEN`.
 
 ```python
 from cs_demo_downloader.core.downloader_pwa import (
@@ -335,7 +341,20 @@ dll_path = update_cached_pvp_alive_dll(target_path="cache/PvpAlive.dll", force=F
 print(dll_path)
 ```
 
-The current downloader keeps using the existing pure Python signing implementation by default. Windows users who explicitly need the DLL fallback can call the packaged 32-bit bridge helper directly:
+The current downloader uses the private native signer wheel by default on every platform. If you explicitly need the DLL fallback, set `PWA.SIGNATURE_PROVIDER` to one of these values:
+
+- `native`: default private native wheel signer; no DLL or Wine involved.
+- `compiled`: legacy alias for `native`.
+- `pvp_alive_native`: call the packaged 32-bit bridge directly on Windows.
+- `pvp_alive_wine`: call the packaged 32-bit bridge through Wine on Linux.
+
+The DLL is never committed or bundled. Refresh it explicitly when needed:
+
+```bash
+cs-demo-downloader update-pvpalive-dll --target cache/PvpAlive.dll
+```
+
+Python users can also call the bridge helper directly:
 
 ```python
 from cs_demo_downloader.pwa_bridge import call_pvp_alive_swap_data
@@ -346,11 +365,22 @@ signature = call_pvp_alive_swap_data(
 )
 ```
 
-The bridge is Windows-only. Linux and macOS users should call the pure Python signing functions directly; this project does not invoke Wine or QEMU.
+Linux Wine usage is explicit:
+
+```python
+from cs_demo_downloader.pwa_bridge import call_pvp_alive_swap_data_wine
+
+signature = call_pvp_alive_swap_data_wine(
+    dll_path="cache/PvpAlive.dll",
+    inner_json='{"your":"payload"}',
+)
+```
+
+macOS users should use a macOS-compatible private signer wheel; this project does not include a macOS Wine/QEMU fallback.
 
 ## Docker Usage
 
-Use the published GitHub Container Registry image:
+Use the published GitHub Container Registry image without Wine:
 
 ```bash
 docker pull ghcr.io/wangchudi/cs-demo-downloader:latest
@@ -358,10 +388,20 @@ docker pull ghcr.io/wangchudi/cs-demo-downloader:latest
 
 Images are published automatically when a `v*` Git tag is pushed or a GitHub Release is published. Release images are tagged as `latest`, the full semantic version such as `0.1.0`, and shorter version aliases such as `0.1` and `0` when applicable.
 
+Wine-enabled images are published separately with a `-wine` suffix, for example:
+
+```bash
+docker pull ghcr.io/wangchudi/cs-demo-downloader:latest-wine
+```
+
+The Wine image is currently built for `linux/amd64` only because the packaged PWA bridge is a 32-bit Windows executable.
+
 You can also build the image locally from this repository:
 
 ```bash
-docker build -t cs-demo-downloader .
+cp /path/to/cs_demo_pwa_signer-0.1.0-*.whl wheelhouse/
+docker build --build-arg PYTHON_VERSION=3.12 -t cs-demo-downloader .
+docker build --build-arg PYTHON_VERSION=3.12 -f Dockerfile.wine -t cs-demo-downloader:wine .
 ```
 
 Prepare mounted directories and config:
@@ -389,7 +429,7 @@ cs-demo-downloader download --all --config /config/config.jsonc --output /demos
 
 Because Docker uses an explicit config path, `/config/config.jsonc` must exist and be valid.
 
-The Linux container uses the pure Python PWA signing path. It does not use the Windows-only `PvpAlive.dll` bridge and does not include Wine or QEMU fallback. If you want to refresh a cached DLL for another Windows integration, mount a cache directory and run the updater explicitly:
+The default Linux container uses the private native signer wheel and does not include Wine. If you want to refresh a cached DLL, mount a cache directory and run the updater explicitly:
 
 ```bash
 docker run --rm \
@@ -398,13 +438,27 @@ docker run --rm \
   update-pvpalive-dll --target /cache/PvpAlive.dll
 ```
 
+To use the Linux Wine bridge image, switch to the `-wine` tag and set the config to `"SIGNATURE_PROVIDER": "pvp_alive_wine"` with `"PVP_ALIVE_DLL": "/cache/PvpAlive.dll"`:
+
+```bash
+docker run --rm \
+  -v "$(pwd)/config:/config" \
+  -v "$(pwd)/demos:/demos" \
+  -v "$(pwd)/cache:/cache" \
+  ghcr.io/wangchudi/cs-demo-downloader:latest-wine
+```
+
 ### Docker Compose
 
 ```bash
 docker compose run --rm cs-demo-downloader
 ```
 
-`docker-compose.yml` uses `ghcr.io/wangchudi/cs-demo-downloader:latest` by default and mounts `./config`, `./demos`, and `./cache`.
+`docker-compose.yml` uses `ghcr.io/wangchudi/cs-demo-downloader:latest` by default and mounts `./config`, `./demos`, and `./cache`. To run the Wine variant:
+
+```bash
+docker compose --profile wine run --rm cs-demo-downloader-wine
+```
 
 ## Scheduled Downloads
 
@@ -439,7 +493,8 @@ The tests are local and deterministic. They do not require real 5EPlay/PWA/Steam
 - Demo availability depends on the upstream platform APIs.
 - Downloaded files and local configs are intentionally ignored by git.
 - Cached `PvpAlive.dll` files under `cache/` or `vendor/PvpAlive/` are intentionally ignored by git and must not be committed.
-- A 32-bit Windows C++ bridge executable is packaged for explicit Windows-only DLL fallback use. Non-Windows platforms use the pure Python signing functions directly; Wine/QEMU fallback is intentionally not included.
+- PWA signing requires the private `cs-demo-pwa-signer` wheel. The public source tree must not contain the signer algorithm source or an sdist for that package.
+- A 32-bit Windows C++ bridge executable is packaged for explicit DLL fallback use. Linux uses the private native signer by default; Wine is available only through the explicit `pvp_alive_wine` provider or `*-wine` Docker image. QEMU fallback is intentionally not included.
 
 ## License
 

@@ -1,66 +1,123 @@
 {
-  // Demo download directory. "." means the current working directory.
-  "download_path": ".",
+  "DOWNLOAD_PATH": ".", // Demo download directory. CLI --output > user > platform > this value.
 
-  "five_e": {
-    "users": [
+  "SCAN_INTERVAL": "300", // Seconds for external schedulers/future scan loops; CLI runs once.
+
+  "FIVE_E": {
+    // Optional platform-level overrides for all five_e users.
+    // "DOWNLOAD_PATH": "./demos/5e",
+    // "SCAN_INTERVAL": "180",
+
+    "USERS": [
       {
-        // Display label only; not used by platform APIs.
-        "label": "example_5e_user",
-        "userid": "YOUR_5E_USERID_HERE"
+        "LABEL": "example_5e_user", // Display label only; not used by platform APIs.
+
+        "USERID": "YOUR_5E_USERID_HERE"
+
+        // Optional user-level overrides:
+        // "DOWNLOAD_PATH": "./demos/5e/example_5e_user",
+        // "SCAN_INTERVAL": "60"
       }
     ]
   },
 
-  "pwa": {
-    // Shared token used by pwa.users entries that do not set access_token.
-    "default_access_token": "SHARED_PWA_ACCESS_TOKEN",
-    // Default signing path is pure Python on every platform.
-    // Windows users may explicitly call the packaged bridge with PvpAlive.dll if needed.
-    "signature_provider": "python",
-    // Optional cached DLL path for future explicit DLL-based integrations.
-    "pvp_alive_dll": "cache/PvpAlive.dll",
-    "users": [
+  "PWA": {
+    "DEFAULT_ACCESS_TOKEN": "SHARED_PWA_ACCESS_TOKEN", // Shared token for users without access_token.
+
+    // Default signing path uses the private native cs-demo-pwa-signer wheel.
+    // Optional explicit values:
+    // - "native": call the private native signer wheel.
+    // - "compiled": legacy alias for "native".
+    // - "pvp_alive_native": call the packaged bridge directly on Windows.
+    // - "pvp_alive_wine": call the packaged bridge through Wine on Linux.
+    "SIGNATURE_PROVIDER": "native",
+
+    // Optional platform-level overrides for all pwa users.
+    // "DOWNLOAD_PATH": "./demos/pwa",
+    // "SCAN_INTERVAL": "180",
+
+    "PVP_ALIVE_DLL": "cache/PvpAlive.dll", // Used only by pvp_alive_native or pvp_alive_wine.
+
+    "PVP_ALIVE_BRIDGE_EXE": "", // Empty uses the bridge exe installed inside the Python package.
+
+    "PVP_ALIVE_WINE_EXECUTABLE": "wine",
+
+    "PVP_ALIVE_TIMEOUT": "10",
+
+    "USERS": [
       {
-        "label": "pwa_target_1",
-        "steamid": "TARGET_STEAM_ID_1"
+        "LABEL": "pwa_target_1",
+
+        "STEAMID": "TARGET_STEAM_ID_1"
+
+        // Optional user-level overrides:
+        // "DOWNLOAD_PATH": "./demos/pwa/pwa_target_1",
+        // "SCAN_INTERVAL": "60"
       },
+
       {
-        "label": "pwa_target_2",
-        "steamid": "TARGET_STEAM_ID_2"
+        "LABEL": "pwa_target_2",
+
+        "STEAMID": "TARGET_STEAM_ID_2"
       },
+
       {
-        "label": "pwa_target_with_custom_token",
-        "steamid": "TARGET_STEAM_ID_3",
-        "access_token": "OPTIONAL_TARGET_SPECIFIC_PWA_ACCESS_TOKEN"
+        "LABEL": "pwa_target_with_custom_token",
+
+        "STEAMID": "TARGET_STEAM_ID_3",
+
+        "ACCESS_TOKEN": "OPTIONAL_TARGET_SPECIFIC_PWA_ACCESS_TOKEN"
       }
     ]
-  },
-
-  "steam": {
-    "users": [
-      {
-        "label": "example_steam_user",
-        "steamid": "YOUR_STEAM_ID64_HERE",
-        "api_key": "YOUR_STEAM_WEB_API_KEY_HERE",
-        "steamidkey": "YOUR_STEAM_ID_KEY_HERE",
-        "knowncode": "CSGO-xxxxx-xxxxx-xxxxx-xxxxx-xxxxx"
-      }
-    ],
-    "resolver": {
-      "type": "boiler",
-      "executable_path": "boiler-writter",
-      "auto_download": "true",
-      "cache_dir": "",
-      "timeout": "60"
-    },
-    "gc": {
-      "username_env": "STEAM_GC_USERNAME",
-      "password_env": "STEAM_GC_PASSWORD",
-      "two_factor_secret_env": "STEAM_GC_TWO_FACTOR_SECRET",
-      "auth_code_env": "STEAM_GC_AUTH_CODE",
-      "sentry_dir": "",
-      "timeout": "30"
-    }
   }
+
+  // Steam official matchmaking config is temporarily commented out.
+  // This feature is not complete as an out-of-box config path because real replay URL
+  // resolution still depends on optional Steam GC resolver setup.
+  //
+  // ,"STEAM": {
+  //   "DOWNLOAD_PATH": "./demos/steam",
+  //
+  //   "SCAN_INTERVAL": "300",
+  //
+  //   "USERS": [
+  //     {
+  //       "LABEL": "example_steam_user",
+  //
+  //       "STEAMID": "YOUR_STEAM_ID64_HERE",
+  //
+  //       "API_KEY": "YOUR_STEAM_WEB_API_KEY_HERE",
+  //
+  //       "STEAMIDKEY": "YOUR_STEAM_ID_KEY_HERE",
+  //
+  //       "KNOWNCODE": "CSGO-xxxxx-xxxxx-xxxxx-xxxxx-xxxxx"
+  //     }
+  //   ],
+  //
+  //   "RESOLVER": {
+  //     "TYPE": "boiler",
+  //
+  //     "EXECUTABLE_PATH": "boiler-writter",
+  //
+  //     "AUTO_DOWNLOAD": "true",
+  //
+  //     "CACHE_DIR": "",
+  //
+  //     "TIMEOUT": "60"
+  //   },
+  //
+  //   "GC": {
+  //     "USERNAME_ENV": "STEAM_GC_USERNAME",
+  //
+  //     "PASSWORD_ENV": "STEAM_GC_PASSWORD",
+  //
+  //     "TWO_FACTOR_SECRET_ENV": "STEAM_GC_TWO_FACTOR_SECRET",
+  //
+  //     "AUTH_CODE_ENV": "STEAM_GC_AUTH_CODE",
+  //
+  //     "SENTRY_DIR": "",
+  //
+  //     "TIMEOUT": "30"
+  //   }
+  // }
 }

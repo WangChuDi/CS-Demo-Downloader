@@ -5,6 +5,15 @@ __pycache__/
 
 # C extensions
 *.so
+*.pyd
+*.dylib
+!src/cs_demo_downloader/_vendor/
+!src/cs_demo_downloader/_vendor/cs_demo_pwa_signer/
+!src/cs_demo_downloader/_vendor/cs_demo_pwa_signer/manifest.json
+!src/cs_demo_downloader/_vendor/cs_demo_pwa_signer/**/
+!src/cs_demo_downloader/_vendor/cs_demo_pwa_signer/**/*.so
+!src/cs_demo_downloader/_vendor/cs_demo_pwa_signer/**/*.pyd
+!src/cs_demo_downloader/_vendor/cs_demo_pwa_signer/**/*.dylib
 
 # Distribution / packaging
 .Python
@@ -12,6 +21,8 @@ build/
 develop-eggs/
 dist/
 downloads/
+wheelhouse/*.whl
+!wheelhouse/cs_demo_pwa_signer-*.whl
 eggs/
 .eggs/
 lib/
@@ -59,6 +70,7 @@ config.json
 config.jsonc
 cache/
 vendor/PvpAlive/
+private/
 demos/
 *.dem
 *.zip

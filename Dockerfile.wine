@@ -2,12 +2,17 @@ ARG PYTHON_VERSION=3.12
 FROM python:${PYTHON_VERSION}-slim
 
 LABEL maintainer="WangChuDi"
-LABEL description="CS Demo Downloader - 5E, PWA and Steam share-code demo downloader"
+LABEL description="CS Demo Downloader with optional Wine support for explicit PvpAlive.dll bridge use"
 LABEL org.opencontainers.image.source="https://github.com/WangChuDi/CS-Demo-Downloader"
-LABEL org.opencontainers.image.description="CLI Docker image for scheduled Counter-Strike demo downloads"
+LABEL org.opencontainers.image.description="CLI Docker image with Wine for explicit PvpAlive.dll bridge integrations"
 LABEL org.opencontainers.image.licenses="MIT"
 
 WORKDIR /app
+
+RUN dpkg --add-architecture i386 \
+    && apt-get update \
+    && apt-get install -y --no-install-recommends wine wine32:i386 \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY pyproject.toml README.md README_CN.md ./
 COPY scripts/select_private_signer_wheel.py ./scripts/select_private_signer_wheel.py
@@ -18,12 +23,14 @@ RUN signer_wheel="$(python scripts/select_private_signer_wheel.py wheelhouse)" \
     && pip install --no-cache-dir "$signer_wheel" \
     && pip install --no-cache-dir . \
     && useradd --create-home --shell /usr/sbin/nologin appuser \
-    && mkdir -p /config /demos /cache \
-    && chown -R appuser:appuser /config /demos /cache
+    && mkdir -p /config /demos /cache /wine \
+    && chown -R appuser:appuser /config /demos /cache /wine
 
 VOLUME ["/config", "/demos", "/cache"]
 
 ENV DEMO_PATH=/demos
+ENV WINEPREFIX=/wine
+ENV WINEDEBUG=-all
 
 USER appuser
 

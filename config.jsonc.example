@@ -24,9 +24,10 @@
   "PWA": {
     "DEFAULT_ACCESS_TOKEN": "SHARED_PWA_ACCESS_TOKEN", // Shared token for users without access_token.
 
-    // Default signing path uses the private native cs-demo-pwa-signer wheel.
+    // Default signing path uses an installed native signer when present,
+    // then falls back to the bundled compiled signer matrix.
     // Optional explicit values:
-    // - "native": call the private native signer wheel.
+    // - "native": use the installed native signer or bundled compiled signer.
     // - "compiled": legacy alias for "native".
     // - "pvp_alive_native": call the packaged bridge directly on Windows.
     // - "pvp_alive_wine": call the packaged bridge through Wine on Linux.

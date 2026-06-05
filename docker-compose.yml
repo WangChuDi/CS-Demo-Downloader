@@ -9,3 +9,14 @@ services:
     command: ["download", "--all", "--config", "/config/config.jsonc", "--output", "/demos"]
     # 可配合 cron 或 systemd timer 定时运行
     # 运行方式: docker-compose run --rm cs-demo-downloader
+
+  cs-demo-downloader-wine:
+    image: ghcr.io/wangchudi/cs-demo-downloader:latest-wine
+    container_name: cs-demo-downloader-wine
+    profiles: ["wine"]
+    volumes:
+      - ./config:/config          # 配置文件目录
+      - ./demos:/demos            # Demo 下载目录
+      - ./cache:/cache            # Wine bridge 使用的 PvpAlive.dll 缓存目录
+    command: ["download", "--all", "--config", "/config/config.jsonc", "--output", "/demos"]
+    # 运行方式: docker compose --profile wine run --rm cs-demo-downloader-wine

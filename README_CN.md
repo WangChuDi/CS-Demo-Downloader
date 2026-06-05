@@ -135,7 +135,7 @@ https://www.5eplay.com/player/11814738gjdwn7
 
 PWA Demo 下载链接现在会使用当前签名参数生成，并在最终文件请求中发送必要的 PWA 请求头。Access Token 可能会过期。如果 PWA 下载突然不可用，优先刷新 token。
 
-PWA 签名由私有编译 wheel `cs-demo-pwa-signer` 提供。公开 downloader 仓库不包含签名算法源码。使用 PWA 下载前需要先安装私有 wheel；wheel 的接口约定和发布前检查见 `docs/private-pwa-signer-wheel.md`。
+PWA 签名由私有编译 wheel `cs-demo-pwa-signer` 提供。公开 downloader 仓库不包含签名算法源码，只携带经过审计的编译产物。现在公开库会在 `src/cs_demo_downloader/_vendor/cs_demo_pwa_signer/` 下维护一个 manifest 驱动的 bundled signer 矩阵，运行时会按当前 Python / OS / CPU 标签选择匹配的编译扩展；在已覆盖的 bundled 运行时上，普通用户仍然只需要一次 `pip install`，不需要额外安装私有 wheel。维护者可以从私有 signer 仓库自动触发 workflow：Action 会构建 wheels、同步 `wheelhouse/`，并把刷新后的 vendored signer 产物提交回当前仓库。只有维护者在未覆盖运行时上做本地验证时，才需要使用 `docs/private-pwa-signer-wheel.md` 里的私有 wheel 兜底流程。
 
 如果一个 PWA access token 可以访问多个目标 Steam 账号，把它写在 `PWA.DEFAULT_ACCESS_TOKEN`，然后为每个目标 `STEAMID` 添加一条 `PWA.USERS` 配置。单个目标也可以用自己的 `ACCESS_TOKEN` 覆盖默认 token。
 
@@ -185,22 +185,13 @@ pip install "cs-demo-downloader[steam-login] @ git+https://github.com/WangChuDi/
 
 未来发布到 PyPI 后，才可以使用 `pip install cs-demo-downloader` 这种包名安装方式。
 
-如果是从本仓库源码本地开发，使用 editable install：
+如果是从本仓库源码本地开发，使用 editable install。当前运行时若已被 bundled signer 矩阵覆盖，直接执行 `pip install -e .` 即可，不需要额外安装私有 signer wheel：
 
 ```bash
-pip install "$(python scripts/select_private_signer_wheel.py wheelhouse)"
 pip install -e .
 ```
 
-Windows PowerShell：
-
-```powershell
-$wheel = python scripts/select_private_signer_wheel.py wheelhouse
-pip install $wheel
-pip install -e .
-```
-
-私有 signer wheel 只在真实 PWA 签名时需要；公开测试会 mock 这个边界。
+只有维护者在 bundled signer 矩阵没有覆盖当前运行时时，才需要额外安装私有 signer wheel；自动同步与本地兜底步骤见 `docs/private-pwa-signer-wheel.md`。公开测试会 mock 这个边界，并验证安装包里是否带有 manifest 与 vendored 二进制。
 
 安装后会提供这个命令：
 
@@ -344,9 +335,9 @@ dll_path = update_cached_pvp_alive_dll(target_path="cache/PvpAlive.dll", force=F
 print(dll_path)
 ```
 
-当前下载器在所有平台默认使用私有 native signer wheel。如果明确需要 DLL fallback，可以把 `PWA.SIGNATURE_PROVIDER` 设置为以下值之一：
+当前下载器会在维护者提供外部 native signer wheel 时优先使用它；否则回退到仓库中同步下来的 bundled signer 矩阵。如果明确需要 DLL fallback，可以把 `PWA.SIGNATURE_PROVIDER` 设置为以下值之一：
 
-- `native`：默认私有 native wheel 签名，不使用 DLL 或 Wine。
+- `native`：默认 native signer 路径，不使用 DLL 或 Wine。
 - `compiled`：`native` 的旧配置别名。
 - `pvp_alive_native`：Windows 上直接调用包内 32 位 bridge。
 - `pvp_alive_wine`：Linux 上通过 Wine 调用包内 32 位 bridge。
@@ -379,7 +370,7 @@ signature = call_pvp_alive_swap_data_wine(
 )
 ```
 
-macOS 用户应直接调用纯 Python 签名函数；本项目不会内置 macOS Wine/QEMU fallback。
+macOS 用户应使用同步下来的 bundled signer 二进制；维护者在未覆盖的 macOS 运行时做本地验证时，可以用匹配的私有 signer wheel 作为兜底。本项目不会内置 macOS Wine/QEMU fallback。
 
 ## Docker 使用
 
@@ -399,7 +390,7 @@ docker pull ghcr.io/wangchudi/cs-demo-downloader:latest-wine
 
 Wine 镜像目前只构建 `linux/amd64`，因为包内 PWA bridge 是 32 位 Windows exe。
 
-也可以从本仓库本地构建镜像：
+也可以从本仓库本地构建镜像。Docker 构建会先从 `wheelhouse/` 安装匹配的同步 signer wheel，再安装 downloader 包；维护者在未覆盖目标上构建时，再把匹配的私有 signer wheel 放入 `wheelhouse/`：
 
 ```bash
 cp /path/to/cs_demo_pwa_signer-0.1.0-*.whl wheelhouse/
@@ -432,7 +423,7 @@ cs-demo-downloader download --all --config /config/config.jsonc --output /demos
 
 因为 Docker 使用显式配置路径，所以 `/config/config.jsonc` 必须存在且格式正确。
 
-默认 Linux 容器使用私有编译 signer wheel，不包含 Wine。如果你只是想刷新缓存 DLL，可以挂载 cache 目录并显式运行 updater：
+默认 Linux 容器使用同步下来的 native signer 产物，不包含 Wine。如果你只是想刷新缓存 DLL，可以挂载 cache 目录并显式运行 updater：
 
 ```bash
 docker run --rm \
@@ -487,7 +478,7 @@ python3 -m unittest discover
 python3 -m compileall src tests cli.py
 ```
 
-测试不需要真实 5E/完美世界电竞/Steam 账号，也不会访问真实网络。
+测试不需要真实 5E/完美世界电竞/Steam 账号，也不会访问真实网络。安装测试会创建临时虚拟环境，通过 `pip install` 安装当前包，并验证安装后的包里包含 bundled signer manifest、会从 `site-packages` 加载匹配的 vendored signer 二进制，同时确认 `wheel` 构建依赖由 pip build isolation 自动提供，不需要手动安装 wheel。
 
 ## 注意事项和限制
 
@@ -496,8 +487,8 @@ python3 -m compileall src tests cli.py
 - Demo 是否可下载取决于上游平台接口和账号权限。
 - 本地配置、Demo 文件和下载产物不会提交到 git。
 - `cache/` 或 `vendor/PvpAlive/` 下缓存的 `PvpAlive.dll` 会被 git 忽略，不应提交到仓库。
-- PWA 签名需要私有 `cs-demo-pwa-signer` wheel。公开源码树不能包含 signer 算法源码，也不能发布该包的 sdist。
-- pip 包内包含 32 位 Windows C++ bridge exe，供显式 DLL fallback 使用。Linux 默认使用私有编译 signer；只有显式使用 `pvp_alive_wine` provider 或 `*-wine` Docker 镜像时才会走 Wine。项目不会内置 QEMU fallback。
+- PWA 签名会在匹配运行时使用 bundled 编译 signer 矩阵；维护者仍可安装私有 `cs-demo-pwa-signer` wheel 做本地兜底验证。公开源码树不能包含 signer 算法源码，也不能发布该包的 sdist。
+- pip 包内包含 32 位 Windows C++ bridge exe，供显式 DLL fallback 使用。Linux 默认走 native signer 路径；只有显式使用 `pvp_alive_wine` provider 或 `*-wine` Docker 镜像时才会走 Wine。项目不会内置 QEMU fallback。
 
 ## 许可证
 

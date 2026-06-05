@@ -557,10 +557,20 @@ class PwaDownloaderTests(unittest.TestCase):
 
     def test_sign_demo_request_reports_missing_compiled_signer(self):
         with mock.patch.dict('sys.modules', {'cs_demo_pwa_signer': None}):
-            with self.assertRaises(PwaSignerUnavailableError) as ctx:
-                sign_demo_request('123456', '1710000000', 'access_token=token')
+            with mock.patch('cs_demo_downloader.core.downloader_pwa._load_vendored_compiled_signer', side_effect=PwaSignerUnavailableError('missing vendored signer')):
+                with self.assertRaises(PwaSignerUnavailableError) as ctx:
+                    sign_demo_request('123456', '1710000000', 'access_token=token')
 
-        self.assertIn('cs-demo-pwa-signer', str(ctx.exception))
+        self.assertIn('missing vendored signer', str(ctx.exception))
+
+    def test_load_compiled_signer_uses_vendored_fallback(self):
+        vendored_signer = SimpleNamespace(sign_demo_request=mock.Mock(return_value='vendored-signature'))
+        with mock.patch.dict('sys.modules', {'cs_demo_pwa_signer': None}):
+            with mock.patch('cs_demo_downloader.core.downloader_pwa._load_vendored_compiled_signer', return_value=vendored_signer):
+                signature = sign_demo_request('123456', '1710000000', 'access_token=token')
+
+        self.assertEqual('vendored-signature', signature)
+        vendored_signer.sign_demo_request.assert_called_once_with('123456', '1710000000', 'access_token=token')
 
     def test_get_demo_url_includes_signed_query(self):
         with mock.patch('cs_demo_downloader.core.downloader_pwa.random.randint', return_value=123456):

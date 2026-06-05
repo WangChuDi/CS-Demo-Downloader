@@ -132,7 +132,7 @@ The `USERID` value is `11814738gjdwn7`.
 
 PWA demo download links are now generated with the current signed query parameters and the downloader sends the required PWA request headers for the final file request. Tokens can expire. If PWA downloads stop working, refresh the token first.
 
-PWA signing is provided by the private native `cs-demo-pwa-signer` wheel. The public downloader repository does not include the signing algorithm source. Install the private wheel before using PWA downloads; see `docs/private-pwa-signer-wheel.md` for the required wheel contract and verification checklist.
+PWA signing is provided by the private native `cs-demo-pwa-signer` implementation. The public downloader repository does not include the signing algorithm source; it only carries audited compiled artifacts. The bundled fallback now uses a manifest-driven vendored signer matrix under `src/cs_demo_downloader/_vendor/cs_demo_pwa_signer/`, and the runtime selects the matching compiled extension when one is available for the current Python/OS/CPU tag. On supported bundled runtimes, the normal public install remains a single `pip install` with no separate private wheel step. Maintainers can keep that bundled matrix current automatically from the private signer repository; the workflow builds wheels, syncs `wheelhouse/`, and commits the refreshed vendored signer artifacts back into this repository. Maintainers working on uncovered runtimes can use the private-wheel fallback described in `docs/private-pwa-signer-wheel.md`.
 
 If one PWA access token can access multiple target Steam accounts, set it once as `PWA.DEFAULT_ACCESS_TOKEN` and add one `PWA.USERS` entry per target `STEAMID`. A user-specific `ACCESS_TOKEN` can override the default for a single target.
 
@@ -182,22 +182,13 @@ pip install "cs-demo-downloader[steam-login] @ git+https://github.com/WangChuDi/
 
 After a future PyPI release, the package name will be installable with `pip install cs-demo-downloader`.
 
-For local development from this repository, use editable installs instead:
+For local development from this repository, use editable installs instead. When the current runtime is covered by the synchronized bundled signer matrix, `pip install -e .` is enough and no separate private signer install is required:
 
 ```bash
-pip install "$(python scripts/select_private_signer_wheel.py wheelhouse)"
 pip install -e .
 ```
 
-On Windows PowerShell:
-
-```powershell
-$wheel = python scripts/select_private_signer_wheel.py wheelhouse
-pip install $wheel
-pip install -e .
-```
-
-The private signer wheel is required only for real PWA signing. Public tests mock that boundary.
+Only maintainers working on runtimes outside that bundled matrix need the private signer wheel fallback. See `docs/private-pwa-signer-wheel.md` for the automatic private-repository sync and local-only fallback workflows. Public tests mock that boundary and also verify that installed packages carry the bundled signer manifest plus the selected vendored binary.
 
 The package installs this console command:
 
@@ -341,9 +332,9 @@ dll_path = update_cached_pvp_alive_dll(target_path="cache/PvpAlive.dll", force=F
 print(dll_path)
 ```
 
-The current downloader uses the private native signer wheel by default on every platform. If you explicitly need the DLL fallback, set `PWA.SIGNATURE_PROVIDER` to one of these values:
+The current downloader uses an installed native signer wheel when a maintainer has provided one, then falls back to the bundled compiled signer selected from the synchronized vendored matrix. If you explicitly need the DLL fallback, set `PWA.SIGNATURE_PROVIDER` to one of these values:
 
-- `native`: default private native wheel signer; no DLL or Wine involved.
+- `native`: default native signer path; no DLL or Wine involved.
 - `compiled`: legacy alias for `native`.
 - `pvp_alive_native`: call the packaged 32-bit bridge directly on Windows.
 - `pvp_alive_wine`: call the packaged 32-bit bridge through Wine on Linux.
@@ -376,7 +367,7 @@ signature = call_pvp_alive_swap_data_wine(
 )
 ```
 
-macOS users should use a macOS-compatible private signer wheel; this project does not include a macOS Wine/QEMU fallback.
+macOS users should use a synchronized bundled signer build; maintainers validating uncovered macOS runtimes can use a matching private signer wheel as a local fallback. This project still does not include a macOS Wine/QEMU fallback.
 
 ## Docker Usage
 
@@ -396,7 +387,7 @@ docker pull ghcr.io/wangchudi/cs-demo-downloader:latest-wine
 
 The Wine image is currently built for `linux/amd64` only because the packaged PWA bridge is a 32-bit Windows executable.
 
-You can also build the image locally from this repository:
+You can also build the image locally from this repository. Docker builds install the matching synchronized signer wheel from `wheelhouse/` before installing the downloader package. For maintainer-only builds on uncovered targets, place a matching private signer wheel in `wheelhouse/` before building:
 
 ```bash
 cp /path/to/cs_demo_pwa_signer-0.1.0-*.whl wheelhouse/
@@ -429,7 +420,7 @@ cs-demo-downloader download --all --config /config/config.jsonc --output /demos
 
 Because Docker uses an explicit config path, `/config/config.jsonc` must exist and be valid.
 
-The default Linux container uses the private native signer wheel and does not include Wine. If you want to refresh a cached DLL, mount a cache directory and run the updater explicitly:
+The default Linux container uses the synchronized native signer artifact and does not include Wine. If you want to refresh a cached DLL, mount a cache directory and run the updater explicitly:
 
 ```bash
 docker run --rm \
@@ -484,7 +475,7 @@ Run a syntax/bytecode check:
 python3 -m compileall src tests cli.py
 ```
 
-The tests are local and deterministic. They do not require real 5EPlay/PWA/Steam credentials or network access.
+The tests are local and deterministic. They do not require real 5EPlay/PWA/Steam credentials or network access. The install tests create temporary virtual environments, install the package with `pip install`, and verify that the installed package contains the bundled signer manifest, loads the matching vendored signer binary from `site-packages`, and relies on pip build isolation to provide the `wheel` build dependency instead of requiring a manual wheel install.
 
 ## Notes and Limitations
 
@@ -493,8 +484,8 @@ The tests are local and deterministic. They do not require real 5EPlay/PWA/Steam
 - Demo availability depends on the upstream platform APIs.
 - Downloaded files and local configs are intentionally ignored by git.
 - Cached `PvpAlive.dll` files under `cache/` or `vendor/PvpAlive/` are intentionally ignored by git and must not be committed.
-- PWA signing requires the private `cs-demo-pwa-signer` wheel. The public source tree must not contain the signer algorithm source or an sdist for that package.
-- A 32-bit Windows C++ bridge executable is packaged for explicit DLL fallback use. Linux uses the private native signer by default; Wine is available only through the explicit `pvp_alive_wine` provider or `*-wine` Docker image. QEMU fallback is intentionally not included.
+- PWA signing uses the bundled compiled signer matrix on matching runtimes; maintainers can still override it with an installed private `cs-demo-pwa-signer` wheel for local fallback validation. The public source tree must not contain the signer algorithm source or an sdist for that package.
+- A 32-bit Windows C++ bridge executable is packaged for explicit DLL fallback use. Linux uses the native signer path by default; Wine is available only through the explicit `pvp_alive_wine` provider or `*-wine` Docker image. QEMU fallback is intentionally not included.
 
 ## License
 

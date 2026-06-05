@@ -1,11 +1,15 @@
 """
 完美世界电竞平台 Demo 下载器
 """
+import json
 import random
+import sys
 import time
 import requests
 from collections.abc import Callable
-from importlib import import_module
+from importlib import import_module, machinery, resources, util
+from pathlib import Path
+from packaging import tags
 from typing import Protocol, cast
 
 
@@ -38,11 +42,90 @@ def _load_compiled_signer() -> _CompiledPwaSigner:
         module = import_module('cs_demo_pwa_signer')
     except ModuleNotFoundError as exc:
         if exc.name == 'cs_demo_pwa_signer':
-            message = "PWA signing requires the proprietary compiled wheel 'cs-demo-pwa-signer'. Install that wheel before using PWA demo URL signing."
-            raise PwaSignerUnavailableError(message) from exc
+            return _load_vendored_compiled_signer(exc)
         raise
 
     return cast(_CompiledPwaSigner, cast(object, module))
+
+
+def _load_vendored_compiled_signer(exc: ModuleNotFoundError) -> _CompiledPwaSigner:
+    package_root = resources.files('cs_demo_downloader')
+    vendor_dir = package_root.joinpath('_vendor').joinpath('cs_demo_pwa_signer')
+
+    manifest_path = vendor_dir.joinpath('manifest.json')
+    if not manifest_path.is_file():
+        raise PwaSignerUnavailableError('Bundled PWA signer manifest is missing. Install a matching cs-demo-pwa-signer wheel for this runtime.') from exc
+
+    manifest_data = cast(object, json.loads(manifest_path.read_text(encoding='utf-8')))
+    if not isinstance(manifest_data, dict):
+        raise PwaSignerUnavailableError('Bundled PWA signer manifest is invalid.') from exc
+    manifest = cast(dict[str, object], manifest_data)
+    entries_value = manifest.get('entries', [])
+    if not isinstance(entries_value, list):
+        raise PwaSignerUnavailableError('Bundled PWA signer manifest entries are invalid.') from exc
+
+    supported_tags = list(tags.sys_tags())
+    available_entries: dict[tuple[str, str, str], dict[str, str]] = {}
+    entries = cast(list[object], entries_value)
+    for entry_value in entries:
+        if not isinstance(entry_value, dict):
+            continue
+        entry_object = cast(dict[str, object], entry_value)
+        python_tag_value = entry_object.get('python_tag')
+        abi_tag_value = entry_object.get('abi_tag')
+        platform_tag_value = entry_object.get('platform_tag')
+        directory_value = entry_object.get('directory')
+        extension_value = entry_object.get('extension')
+        if not all(isinstance(value, str) for value in (python_tag_value, abi_tag_value, platform_tag_value, directory_value, extension_value)):
+            continue
+        python_tag = cast(str, python_tag_value)
+        abi_tag = cast(str, abi_tag_value)
+        platform_tag = cast(str, platform_tag_value)
+        directory = cast(str, directory_value)
+        extension = cast(str, extension_value)
+        entry = {
+            'python_tag': python_tag,
+            'abi_tag': abi_tag,
+            'platform_tag': platform_tag,
+            'directory': directory,
+            'extension': extension,
+        }
+        available_entries[(python_tag, abi_tag, platform_tag)] = entry
+
+    for supported_tag in supported_tags:
+        entry = available_entries.get((supported_tag.interpreter, supported_tag.abi, supported_tag.platform))
+        if entry is None:
+            continue
+
+        candidate = vendor_dir.joinpath(entry['directory']).joinpath(entry['extension'])
+        if not candidate.is_file():
+            continue
+
+        if Path(entry['extension']).suffix not in set(machinery.EXTENSION_SUFFIXES):
+            continue
+
+        with resources.as_file(candidate) as extension_path:
+            spec = util.spec_from_file_location('cs_demo_pwa_signer', extension_path)
+            if spec is None or spec.loader is None:
+                break
+            module = util.module_from_spec(spec)
+            sys.modules['cs_demo_pwa_signer'] = module
+            try:
+                spec.loader.exec_module(module)
+            except (ImportError, OSError) as load_exc:
+                _ = sys.modules.pop('cs_demo_pwa_signer', None)
+                message = f"Bundled PWA signer for tag {supported_tag} is not compatible with this runtime: {load_exc}"
+                raise PwaSignerUnavailableError(message) from load_exc
+            return cast(_CompiledPwaSigner, cast(object, module))
+
+    available_tags = ', '.join(f'{python_tag}-{abi_tag}-{platform_tag}' for python_tag, abi_tag, platform_tag in sorted(available_entries)) or 'none'
+    current_tags = ', '.join(f'{tag.interpreter}-{tag.abi}-{tag.platform}' for tag in supported_tags[:10])
+    message = (
+        "PWA signing requires a compatible compiled signer. "
+        f"No bundled signer matches this runtime. Current supported tags include: {current_tags}. "
+        f"Bundled signer tags: {available_tags}. Install a matching 'cs-demo-pwa-signer' wheel for this runtime."
+    )
+    raise PwaSignerUnavailableError(message) from exc
 
 
 def sign_demo_request(randnum: str, timestamp: str, data: str) -> str:
@@ -129,10 +212,23 @@ def get_match_list(
         response = requests.get(PWA_MATCH_LIST_URL, params=params, headers=headers, timeout=10)
         
         if response.status_code == 200:
-            data = response.json()
-            match_data = data.get('data', []) if isinstance(data, dict) else []
-            if isinstance(match_data, list):
-                return [match['match'] for match in match_data if isinstance(match, dict) and isinstance(match.get('match'), str)]
+            response_data = cast(object, response.json())
+            if not isinstance(response_data, dict):
+                return []
+            data = cast(dict[str, object], response_data)
+            match_data = data.get('data', [])
+            if not isinstance(match_data, list):
+                return []
+            matches = cast(list[object], match_data)
+            match_ids: list[str] = []
+            for match in matches:
+                if not isinstance(match, dict):
+                    continue
+                match_record = cast(dict[str, object], match)
+                match_id = match_record.get('match')
+                if isinstance(match_id, str):
+                    match_ids.append(match_id)
+            return match_ids
         
         return []
     except requests.RequestException as e:
@@ -190,7 +286,7 @@ def get_all_demo_urls(
         {match_id: demo_url} 字典
     """
     match_ids = get_match_list(steamid, access_token, size)
-    demo_urls = {}
+    demo_urls: dict[str, str] = {}
     
     for match_id in match_ids:
         demo_url = get_demo_url(match_id, access_token, signer=signer)

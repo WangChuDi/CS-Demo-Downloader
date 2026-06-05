@@ -1,0 +1,14 @@
+{
+  "entries": [
+    {
+      "abi_tag": "cp312",
+      "directory": "cp312-cp312-linux_x86_64",
+      "extension": "cs_demo_pwa_signer.cpython-312-x86_64-linux-gnu.so",
+      "platform_tag": "linux_x86_64",
+      "python_tag": "cp312",
+      "sha256": "febff583cd05d20ce804384795eebd5ffd33d1aea15ada89cb5c66f0667435a5",
+      "wheel": "cs_demo_pwa_signer-0.1.0-cp312-cp312-linux_x86_64.whl"
+    }
+  ],
+  "package": "cs_demo_pwa_signer"
+}

@@ -1,1 +1,3 @@
 recursive-include src/cs_demo_downloader/bin *.exe
+include src/cs_demo_downloader/_vendor/cs_demo_pwa_signer/manifest.json
+recursive-include src/cs_demo_downloader/_vendor/cs_demo_pwa_signer *.so *.pyd *.dylib

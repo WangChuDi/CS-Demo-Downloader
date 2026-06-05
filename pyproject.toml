@@ -26,6 +26,7 @@ classifiers = [
   "Topic :: Utilities"
 ]
 dependencies = [
+  "packaging>=23",
   "requests>=2.28.0"
 ]
 
@@ -61,7 +62,13 @@ cs-demo-downloader = "cs_demo_downloader.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-cs_demo_downloader = ["bin/*.exe"]
+cs_demo_downloader = [
+  "bin/*.exe",
+  "_vendor/cs_demo_pwa_signer/manifest.json",
+  "_vendor/cs_demo_pwa_signer/*/*.so",
+  "_vendor/cs_demo_pwa_signer/*/*.pyd",
+  "_vendor/cs_demo_pwa_signer/*/*.dylib"
+]
 
 [tool.setuptools.exclude-package-data]
 cs_demo_downloader = ["bin/*.cpp"]

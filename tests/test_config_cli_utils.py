@@ -15,7 +15,7 @@ from unittest import mock
 import requests
 
 from cs_demo_downloader import cli
-from cs_demo_downloader.core.config import Config, ConfigLoadError, load_config, save_config
+from cs_demo_downloader.core.config import Config, ConfigLoadError, load_config
 from cs_demo_downloader.core.downloader_pwa import (
     PwaSignerUnavailableError,
     build_download_headers,
@@ -109,37 +109,19 @@ class LoadConfigTests(unittest.TestCase):
                 config_file.write('''{
   // Download into the current working directory.
   "download_path": ".",
-  "scan_interval": "300",
   "five_e": {
-    "download_path": "/tmp/five-e-platform",
-    "scan_interval": "120",
     "users": [
-      {
-        "label": "five-e-label",
-        "userid": "5e-user",
-        "download_path": "/tmp/five-e-user",
-        "scan_interval": "60"
-      }
+      {"label": "five-e-label", "userid": "5e-user"}
     ]
   },
   "pwa": {
     "default_access_token": "shared-token",
-    "download_path": "/tmp/pwa-platform",
-    "scan_interval": "180",
     "users": [
       {"label": "pwa-one", "steamid": "steam-1"},
-      {
-        "label": "pwa-two",
-        "steamid": "steam-2",
-        "access_token": "override-token",
-        "download_path": "/tmp/pwa-user",
-        "scan_interval": "90"
-      }
+      {"label": "pwa-two", "steamid": "steam-2", "access_token": "override-token"}
     ]
   },
   "steam": {
-    "download_path": "/tmp/steam-platform",
-    "scan_interval": "240",
     "users": [
       {
         "label": "steam-label",
@@ -157,110 +139,13 @@ class LoadConfigTests(unittest.TestCase):
             config = load_config(config_path)
 
         self.assertEqual('.', config.download_path)
-        self.assertEqual('300', config.scan_interval)
-        five_e_user = config.get_users_5e()[0]
-        self.assertEqual('five-e-label', five_e_user.label)
-        self.assertEqual('five-e-label', five_e_user.name)
-        self.assertEqual('/tmp/five-e-user', config.get_download_path('5e', five_e_user))
-        self.assertEqual('60', config.get_scan_interval('5e', five_e_user))
+        self.assertEqual('five-e-label', config.get_users_5e()[0].label)
+        self.assertEqual('five-e-label', config.get_users_5e()[0].name)
         pwa_users = config.get_users_pwa()
         self.assertEqual('shared-token', pwa_users[0].access_token)
         self.assertEqual('override-token', pwa_users[1].access_token)
-        self.assertEqual('/tmp/pwa-platform', config.get_download_path('pwa', pwa_users[0]))
-        self.assertEqual('/tmp/pwa-user', config.get_download_path('pwa', pwa_users[1]))
-        self.assertEqual('180', config.get_scan_interval('pwa', pwa_users[0]))
-        self.assertEqual('90', config.get_scan_interval('pwa', pwa_users[1]))
         self.assertEqual({'type': 'boiler'}, config.steam_resolver)
         self.assertEqual({'timeout': '30'}, config.steam_gc)
-        steam_user = config.get_users_steam()[0]
-        self.assertEqual('/tmp/steam-platform', config.get_download_path('steam', steam_user))
-        self.assertEqual('240', config.get_scan_interval('steam', steam_user))
-
-    def test_load_config_accepts_uppercase_schema_keys(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            config_path = os.path.join(temp_dir, 'config.jsonc')
-            with open(config_path, 'w', encoding='utf-8') as config_file:
-                config_file.write('''{
-  "DOWNLOAD_PATH": "/global-demos",
-  "SCAN_INTERVAL": "300",
-  "FIVE_E": {
-    "DOWNLOAD_PATH": "/five-e-demos",
-    "SCAN_INTERVAL": "120",
-    "USERS": [
-      {"LABEL": "five-e-user", "USERID": "5e-user", "DOWNLOAD_PATH": "/five-e-user-demos", "SCAN_INTERVAL": "60"}
-    ]
-  },
-  "PWA": {
-    "DEFAULT_ACCESS_TOKEN": "token",
-    "SIGNATURE_PROVIDER": "native",
-    "DOWNLOAD_PATH": "/pwa-demos",
-    "SCAN_INTERVAL": "180",
-    "USERS": [
-      {"LABEL": "pwa-user", "STEAMID": "steam-1", "DOWNLOAD_PATH": "/pwa-user-demos", "SCAN_INTERVAL": "90"}
-    ]
-  }
-}''')
-
-            config = load_config(config_path)
-
-        five_e_user = config.get_users_5e()[0]
-        pwa_user = config.get_users_pwa()[0]
-        self.assertEqual('/global-demos', config.download_path)
-        self.assertEqual('300', config.scan_interval)
-        self.assertEqual('/five-e-user-demos', config.get_download_path('5e', five_e_user))
-        self.assertEqual('60', config.get_scan_interval('5e', five_e_user))
-        self.assertEqual('token', pwa_user.access_token)
-        self.assertEqual('native', config.pwa['signature_provider'])
-        self.assertEqual('/pwa-user-demos', config.get_download_path('pwa', pwa_user))
-        self.assertEqual('90', config.get_scan_interval('pwa', pwa_user))
-
-    def test_download_path_and_scan_interval_override_precedence(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            config_path = os.path.join(temp_dir, 'config.jsonc')
-            with open(config_path, 'w', encoding='utf-8') as config_file:
-                config_file.write('''{
-  "download_path": "/global-demos",
-  "scan_interval": "300",
-  "five_e": {
-    "download_path": "/five-e-demos",
-    "scan_interval": "120",
-    "users": [
-      {"label": "five-e-user", "userid": "5e-user", "download_path": "/five-e-user-demos", "scan_interval": "60"}
-    ]
-  },
-  "pwa": {
-    "default_access_token": "token",
-    "download_path": "/pwa-demos",
-    "scan_interval": "180",
-    "users": [
-      {"label": "pwa-user", "steamid": "steam-1", "download_path": "/pwa-user-demos", "scan_interval": "90"}
-    ]
-  }
-}''')
-
-            config = load_config(config_path)
-
-        five_e_user = config.get_users_5e()[0]
-        pwa_user = config.get_users_pwa()[0]
-        self.assertEqual('/five-e-user-demos', config.get_download_path('5e', five_e_user))
-        self.assertEqual('/pwa-user-demos', config.get_download_path('pwa', pwa_user))
-        self.assertEqual('/global-demos', config.get_download_path('steam', mock.Mock(download_path=None)))
-        self.assertEqual('60', config.get_scan_interval('5e', five_e_user))
-        self.assertEqual('90', config.get_scan_interval('pwa', pwa_user))
-        self.assertEqual('300', config.get_scan_interval('steam'))
-
-    def test_platform_download_path_and_scan_interval_override_global(self):
-        config = Config(
-            download_path='/global-demos',
-            scan_interval='300',
-            five_e={'download_path': '/five-e-demos', 'scan_interval': '120'},
-            users_5e=[{'label': 'five-e-user', 'userid': '5e-user'}],
-        )
-
-        user = config.get_users_5e()[0]
-
-        self.assertEqual('/five-e-demos', config.get_download_path('5e', user))
-        self.assertEqual('120', config.get_scan_interval('5e', user))
 
     def test_load_config_accepts_legacy_name_alias(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -276,28 +161,6 @@ class LoadConfigTests(unittest.TestCase):
         self.assertEqual('legacy', user.label)
         self.assertEqual('legacy', user.name)
 
-    def test_save_config_writes_uppercase_schema_keys(self):
-        config = Config(
-            download_path='/demos',
-            scan_interval='300',
-            pwa={'signature_provider': 'native'},
-            users_pwa=[{'label': 'pwa-user', 'steamid': 'steam-1', 'access_token': 'token'}],
-        )
-
-        with tempfile.TemporaryDirectory() as temp_dir:
-            config_path = os.path.join(temp_dir, 'config.json')
-            save_config(config, config_path)
-            with open(config_path, 'r', encoding='utf-8') as config_file:
-                data = json.load(config_file)
-
-        self.assertIn('DOWNLOAD_PATH', data)
-        self.assertIn('SCAN_INTERVAL', data)
-        self.assertIn('PWA', data)
-        self.assertIn('SIGNATURE_PROVIDER', data['PWA'])
-        self.assertIn('USERS', data['PWA'])
-        self.assertIn('STEAMID', data['PWA']['USERS'][0])
-        self.assertNotIn('download_path', data)
-
 
 class CliTests(unittest.TestCase):
     def test_cli_returns_non_zero_for_explicit_missing_config(self):
@@ -312,86 +175,6 @@ class CliTests(unittest.TestCase):
         self.assertNotEqual(exit_code, 0)
         self.assertIn('Config file not found', stderr.getvalue())
         self.assertEqual('', stdout.getvalue())
-
-    def test_download_pwa_uses_user_download_path(self):
-        config = Config(
-            download_path='/global-demos',
-            pwa={'default_access_token': 'token', 'download_path': '/pwa-demos'},
-            users_pwa=[{'label': 'pwa-user', 'steamid': 'steam-1', 'download_path': '/pwa-user-demos'}],
-        )
-
-        with mock.patch('cs_demo_downloader.cli.ensure_download_path', return_value=True) as ensure_path:
-            with mock.patch('cs_demo_downloader.cli.get_pwa_demos', return_value={'match-1': 'https://example.invalid/demo.dem'}):
-                with mock.patch('cs_demo_downloader.cli.build_pwa_download_headers', return_value={}):
-                    with mock.patch('cs_demo_downloader.cli.download_and_extract') as download:
-                        cli.download_pwa_demos(config)
-
-        ensure_path.assert_called_once_with('/pwa-user-demos')
-        download.assert_called_once_with(
-            'https://example.invalid/demo.dem',
-            '/pwa-user-demos',
-            cli.print_progress,
-            headers={},
-        )
-
-    def test_output_override_wins_over_user_download_path(self):
-        config = Config(
-            download_path='/override-demos',
-            download_path_override=True,
-            pwa={'default_access_token': 'token', 'download_path': '/pwa-demos'},
-            users_pwa=[{'label': 'pwa-user', 'steamid': 'steam-1', 'download_path': '/pwa-user-demos'}],
-        )
-
-        with mock.patch('cs_demo_downloader.cli.ensure_download_path', return_value=True):
-            with mock.patch('cs_demo_downloader.cli.get_pwa_demos', return_value={'match-1': 'https://example.invalid/demo.dem'}):
-                with mock.patch('cs_demo_downloader.cli.build_pwa_download_headers', return_value={}):
-                    with mock.patch('cs_demo_downloader.cli.download_and_extract') as download:
-                        cli.download_pwa_demos(config)
-
-        self.assertEqual('/override-demos', download.call_args.args[1])
-
-    def test_cli_downloads_5e_to_user_specific_path(self):
-        config = Config(
-            download_path='/tmp/global-demos',
-            five_e={'download_path': '/tmp/five-e-platform'},
-            users_5e=[{
-                'label': 'five-e-user',
-                'userid': '5e-user',
-                'download_path': '/tmp/five-e-user',
-            }],
-        )
-
-        with mock.patch('cs_demo_downloader.cli.ensure_download_path', return_value=True):
-            with mock.patch('cs_demo_downloader.cli.get_5e_demos', return_value={'match-1': 'https://example.invalid/demo.zip'}):
-                with mock.patch('cs_demo_downloader.cli.download_and_extract') as download:
-                    cli.download_5e_demos(config)
-
-        download.assert_called_once_with(
-            'https://example.invalid/demo.zip',
-            '/tmp/five-e-user',
-            cli.print_progress,
-        )
-
-    def test_output_override_wins_over_user_and_platform_paths(self):
-        config = Config(
-            download_path='/tmp/override',
-            download_path_override=True,
-            pwa={'download_path': '/tmp/pwa-platform'},
-            users_pwa=[{
-                'label': 'pwa-user',
-                'steamid': '76561198159976336',
-                'access_token': 'token',
-                'download_path': '/tmp/pwa-user',
-            }],
-        )
-
-        with mock.patch('cs_demo_downloader.cli.ensure_download_path', return_value=True):
-            with mock.patch('cs_demo_downloader.cli.get_pwa_demos', return_value={'match-1': 'https://example.invalid/demo.dem?access_token=secret'}):
-                with mock.patch('cs_demo_downloader.cli.build_pwa_download_headers', return_value={'X-PWA-Signature': 'signed'}):
-                    with mock.patch('cs_demo_downloader.cli.download_and_extract') as download:
-                        cli.download_pwa_demos(config)
-
-        self.assertEqual('/tmp/override', download.call_args.args[1])
 
 
 class DownloadFileTests(unittest.TestCase):
@@ -556,21 +339,14 @@ class PwaDownloaderTests(unittest.TestCase):
         )
 
     def test_sign_demo_request_reports_missing_compiled_signer(self):
-        with mock.patch.dict('sys.modules', {'cs_demo_pwa_signer': None}):
-            with mock.patch('cs_demo_downloader.core.downloader_pwa._load_vendored_compiled_signer', side_effect=PwaSignerUnavailableError('missing vendored signer')):
-                with self.assertRaises(PwaSignerUnavailableError) as ctx:
-                    sign_demo_request('123456', '1710000000', 'access_token=token')
+        with tempfile.TemporaryDirectory() as temp_dir_name:
+            empty_package = Path(temp_dir_name)
+            with mock.patch('cs_demo_downloader.core.downloader_pwa.resources.files', return_value=empty_package):
+                with mock.patch.dict('sys.modules', {'cs_demo_pwa_signer': None}):
+                    with self.assertRaises(PwaSignerUnavailableError) as ctx:
+                        sign_demo_request('123456', '1710000000', 'access_token=token')
 
-        self.assertIn('missing vendored signer', str(ctx.exception))
-
-    def test_load_compiled_signer_uses_vendored_fallback(self):
-        vendored_signer = SimpleNamespace(sign_demo_request=mock.Mock(return_value='vendored-signature'))
-        with mock.patch.dict('sys.modules', {'cs_demo_pwa_signer': None}):
-            with mock.patch('cs_demo_downloader.core.downloader_pwa._load_vendored_compiled_signer', return_value=vendored_signer):
-                signature = sign_demo_request('123456', '1710000000', 'access_token=token')
-
-        self.assertEqual('vendored-signature', signature)
-        vendored_signer.sign_demo_request.assert_called_once_with('123456', '1710000000', 'access_token=token')
+        self.assertIn('cs-demo-pwa-signer', str(ctx.exception))
 
     def test_get_demo_url_includes_signed_query(self):
         with mock.patch('cs_demo_downloader.core.downloader_pwa.random.randint', return_value=123456):
@@ -887,12 +663,7 @@ class PwaSignerSelectionTests(unittest.TestCase):
         self.assertTrue(result['m1'].startswith('https://pwaweblogin.wmpvp.com/csgo/demo/m1_0.dem?a=20000&r='))
         self.assertIn('s=sig', result['m1'])
 
-    def test_build_pwa_demo_url_signer_defaults_to_native(self):
-        config = Config()
-
-        self.assertIsNone(cli.build_pwa_demo_url_signer(config))
-
-    def test_build_pwa_demo_url_signer_accepts_compiled_alias(self):
+    def test_build_pwa_demo_url_signer_defaults_to_compiled(self):
         config = Config(pwa={'signature_provider': 'compiled'})
 
         self.assertIsNone(cli.build_pwa_demo_url_signer(config))
@@ -915,21 +686,6 @@ class PwaSignerSelectionTests(unittest.TestCase):
         self.assertEqual('/cache/PvpAlive.dll', call.call_args.kwargs['dll_path'])
         self.assertEqual('/app/pvp_alive_bridge.exe', call.call_args.kwargs['bridge_path'])
         self.assertEqual(12, call.call_args.kwargs['timeout'])
-
-    def test_build_pwa_demo_url_signer_uses_packaged_bridge_when_path_empty(self):
-        config = Config(pwa={
-            'signature_provider': 'pvp_alive_native',
-            'pvp_alive_dll': '/cache/PvpAlive.dll',
-            'pvp_alive_bridge_exe': '',
-        })
-
-        with mock.patch('cs_demo_downloader.pwa_bridge.call_pvp_alive_swap_data', return_value='native-signature') as call:
-            signer = cli.build_pwa_demo_url_signer(config)
-            if signer is None:
-                self.fail('expected native signer')
-            signer('123456', '1700000000', 'access_token=token&cup_id=0&match_id=m1')
-
-        self.assertIsNone(call.call_args.kwargs['bridge_path'])
 
     def test_build_pwa_demo_url_signer_invokes_wine_bridge(self):
         config = Config(pwa={
@@ -954,7 +710,6 @@ class PwaSignerSelectionTests(unittest.TestCase):
             cli.build_pwa_demo_url_signer(config)
 
         self.assertIn('Unsupported PWA signature_provider', str(ctx.exception))
-        self.assertIn('native', str(ctx.exception))
 
 
 class Bz2DownloadTests(unittest.TestCase):

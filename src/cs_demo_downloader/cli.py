@@ -21,15 +21,6 @@ from .pwa_dll_updater import LATEST_YML_URL, PvpAliveUpdateError, update_cached_
 PwaDemoSigner = Callable[[str, str, str], str]
 
 
-def ensure_download_path(path: str) -> bool:
-    try:
-        os.makedirs(path, exist_ok=True)
-    except OSError as e:
-        print(f"Error creating download path '{path}': {e}", file=sys.stderr)
-        return False
-    return True
-
-
 def print_progress(downloaded: int, total: int):
     """打印下载进度"""
     if total > 0:
@@ -49,9 +40,6 @@ def download_5e_demos(config: Config):
     
     for user in users:
         print(f"\n=== Downloading 5E demos for {user.label} ===")
-        download_path = config.get_download_path('5e', user)
-        if not ensure_download_path(download_path):
-            continue
         demo_urls = get_5e_demos(user.userid)
         
         if not demo_urls:
@@ -62,7 +50,7 @@ def download_5e_demos(config: Config):
         
         for match_id, demo_url in demo_urls.items():
             print(f"\nMatch {match_id}: {demo_url}")
-            download_and_extract(demo_url, download_path, print_progress)
+            download_and_extract(demo_url, config.download_path, print_progress)
             print()  # 换行
 
 
@@ -75,9 +63,6 @@ def download_pwa_demos(config: Config):
     
     for user in users:
         print(f"\n=== Downloading PWA demos for {user.label} ===")
-        download_path = config.get_download_path('pwa', user)
-        if not ensure_download_path(download_path):
-            continue
         try:
             signer = build_pwa_demo_url_signer(config)
         except RuntimeError as e:
@@ -98,14 +83,14 @@ def download_pwa_demos(config: Config):
             except RuntimeError as e:
                 print(f"Unable to build PWA download headers for {user.label}: {e}", file=sys.stderr)
                 continue
-            download_and_extract(demo_url, download_path, print_progress, headers=headers)
+            download_and_extract(demo_url, config.download_path, print_progress, headers=headers)
             print()  # 换行
 
 
 def build_pwa_demo_url_signer(config: Config) -> PwaDemoSigner | None:
     pwa_config = config.pwa or {}
-    provider = pwa_config.get('signature_provider', 'native').strip().lower()
-    if provider in {'', 'native', 'compiled'}:
+    provider = pwa_config.get('signature_provider', 'compiled').strip().lower()
+    if provider in {'', 'compiled'}:
         return None
 
     dll_path = pwa_config.get('pvp_alive_dll', os.path.join('cache', 'PvpAlive.dll'))
@@ -148,7 +133,7 @@ def build_pwa_demo_url_signer(config: Config) -> PwaDemoSigner | None:
 
         return wine_signer
 
-    message = f"Unsupported PWA signature_provider '{provider}'. Use 'native', 'pvp_alive_native', or 'pvp_alive_wine' ('compiled' is accepted as a legacy alias)."
+    message = f"Unsupported PWA signature_provider '{provider}'. Use 'compiled', 'pvp_alive_native', or 'pvp_alive_wine'."
     raise RuntimeError(message)
 
 
@@ -199,9 +184,6 @@ def download_steam_demos(config: Config):
 
     for user in users:
         print(f"\n=== Downloading Steam official demos for {user.label} ===")
-        download_path = config.get_download_path('steam', user)
-        if not ensure_download_path(download_path):
-            continue
         demo_urls = get_steam_demos(
             user.api_key,
             user.steamid,
@@ -218,7 +200,7 @@ def download_steam_demos(config: Config):
 
         for match_id, demo_url in demo_urls.items():
             print(f"\nMatch {match_id}: {demo_url}")
-            download_and_extract(demo_url, download_path, print_progress)
+            download_and_extract(demo_url, config.download_path, print_progress)
             print()  # 换行
 
 
@@ -287,7 +269,6 @@ def main():
         # 覆盖下载路径
         if args.output:
             config.download_path = args.output
-            config.download_path_override = True
         
         # 确保下载路径存在
         if not config.download_path:

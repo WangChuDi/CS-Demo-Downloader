@@ -10,9 +10,9 @@ CS Demo Downloader 是一个用于下载 Counter-Strike Demo 文件的工具，�
 
 | 平台 | CLI 参数值 | 需要的账号字段 | 说明 |
 | --- | --- | --- | --- |
-| 5E | `5e` | `USERID` | 从 5E 玩家主页 URL 中获取用户 ID。 |
-| 完美世界电竞 / PWA | `pwa` | `STEAMID`, `ACCESS_TOKEN` | 需要有效的完美世界电竞网页登录/客户端令牌，下载链接会在本地签名。 |
-| Steam 官匹 | `steam` | `STEAMID`, `API_KEY`, `STEAMIDKEY`, `KNOWNCODE` | 已实现 Steam Web API share code 迭代；真实 replay URL 仍需要 Steam Game Coordinator full match info。 |
+| 5E | `5e` | `userid` | 从 5E 玩家主页 URL 中获取用户 ID。 |
+| 完美世界电竞 / PWA | `pwa` | `steamid`, `access_token` | 需要有效的完美世界电竞网页登录/客户端令牌，下载链接会在本地签名。 |
+| Steam 官匹 | `steam` | `steamid`, `api_key`, `steamidkey`, `knowncode` | 已实现 Steam Web API share code 迭代；真实 replay URL 仍需要 Steam Game Coordinator full match info。 |
 
 目前没有实现其他平台。
 
@@ -60,61 +60,68 @@ cp config.jsonc.example config.jsonc
 ```jsonc
 {
   // "." 表示下载到当前运行目录。
-  // 覆盖顺序：CLI --output > 用户 DOWNLOAD_PATH > 平台 DOWNLOAD_PATH > 这里的值。
-  "DOWNLOAD_PATH": ".",
-  // 供外部调度器或未来扫描循环读取；当前 CLI 仍然只运行一次。
-  // 覆盖顺序：用户 SCAN_INTERVAL > 平台 SCAN_INTERVAL > 这里的值。
-  "SCAN_INTERVAL": "300",
-  "FIVE_E": {
-    // 可选："DOWNLOAD_PATH": "./demos/5e", "SCAN_INTERVAL": "180"
-    "USERS": [
+  "download_path": ".",
+  "five_e": {
+    "users": [
       {
-        "LABEL": "example_5e_user", // 仅用于日志显示。
-        "USERID": "YOUR_5E_USERID_HERE"
-        // 可选用户级覆盖：
-        // "DOWNLOAD_PATH": "./demos/5e/example_5e_user",
-        // "SCAN_INTERVAL": "60"
+        "label": "example_5e_user", // 仅用于日志显示。
+        "userid": "YOUR_5E_USERID_HERE"
       }
     ]
   },
-  "PWA": {
-    "DEFAULT_ACCESS_TOKEN": "SHARED_PWA_ACCESS_TOKEN",
-    "SIGNATURE_PROVIDER": "native",
-    // 可选："DOWNLOAD_PATH": "./demos/pwa", "SCAN_INTERVAL": "180"
-    "PVP_ALIVE_DLL": "cache/PvpAlive.dll",
-    // 留空表示使用 pip install 安装在 Python 包内的 pvp_alive_bridge.exe。
-    "PVP_ALIVE_BRIDGE_EXE": "",
-    "PVP_ALIVE_WINE_EXECUTABLE": "wine",
-    "PVP_ALIVE_TIMEOUT": "10",
-    "USERS": [
+  "pwa": {
+    "default_access_token": "SHARED_PWA_ACCESS_TOKEN",
+    "signature_provider": "compiled",
+    "pvp_alive_dll": "cache/PvpAlive.dll",
+    "pvp_alive_bridge_exe": "",
+    "pvp_alive_wine_executable": "wine",
+    "pvp_alive_timeout": "10",
+    "users": [
       {
-        "LABEL": "pwa_target_1",
-        "STEAMID": "TARGET_STEAM_ID_1"
-        // 可选用户级覆盖：
-        // "DOWNLOAD_PATH": "./demos/pwa/pwa_target_1",
-        // "SCAN_INTERVAL": "60"
+        "label": "pwa_target_1",
+        "steamid": "TARGET_STEAM_ID_1"
       },
       {
-        "LABEL": "pwa_target_2",
-        "STEAMID": "TARGET_STEAM_ID_2"
+        "label": "pwa_target_2",
+        "steamid": "TARGET_STEAM_ID_2"
       },
       {
-        "LABEL": "pwa_target_with_custom_token",
-        "STEAMID": "TARGET_STEAM_ID_3",
-        "ACCESS_TOKEN": "OPTIONAL_TARGET_SPECIFIC_PWA_ACCESS_TOKEN"
+        "label": "pwa_target_with_custom_token",
+        "steamid": "TARGET_STEAM_ID_3",
+        "access_token": "OPTIONAL_TARGET_SPECIFIC_PWA_ACCESS_TOKEN"
       }
     ]
+  },
+  "steam": {
+    "users": [
+      {
+        "label": "example_steam_user",
+        "steamid": "YOUR_STEAM_ID64_HERE",
+        "api_key": "YOUR_STEAM_WEB_API_KEY_HERE",
+        "steamidkey": "YOUR_STEAM_ID_KEY_HERE",
+        "knowncode": "CSGO-xxxxx-xxxxx-xxxxx-xxxxx-xxxxx"
+      }
+    ],
+    "resolver": {
+      "type": "boiler",
+      "executable_path": "boiler-writter",
+      "auto_download": "true",
+      "cache_dir": "",
+      "timeout": "60"
+    },
+    "gc": {
+      "username_env": "STEAM_GC_USERNAME",
+      "password_env": "STEAM_GC_PASSWORD",
+      "two_factor_secret_env": "STEAM_GC_TWO_FACTOR_SECRET",
+      "auth_code_env": "STEAM_GC_AUTH_CODE",
+      "sentry_dir": "",
+      "timeout": "30"
+    }
   }
-
-  // Steam 官匹暂时不是开箱即用的完整配置路径。
-  // share-code 迭代已存在，但真实 replay URL 解析仍需要可用的 Steam GC resolver。
-  // 完整注释示例见 config.jsonc.example。
 }
 ```
 
-配置加载器同时支持新的嵌套 JSONC schema 和旧版 `config.json` schema。`LABEL` 取代 `NAME`，含义更明确：它只是日志里的显示名称；加载旧配置时仍兼容 `NAME`。
-
-`DOWNLOAD_PATH` 可以写在全局、平台或单个用户下。最终优先级是 CLI `--output` > 用户 `DOWNLOAD_PATH` > 平台 `DOWNLOAD_PATH` > 全局 `DOWNLOAD_PATH`。`SCAN_INTERVAL` 的优先级是用户 > 平台 > 全局；当前内置 CLI 仍是单次运行，不会自行 sleep 或轮询。
+配置加载器同时支持新的嵌套 JSONC schema 和旧版 `config.json` schema。`label` 取代 `name`，含义更明确：它只是日志里的显示名称；加载旧配置时仍兼容 `name`。
 
 ### 获取 5E User ID
 
@@ -124,36 +131,36 @@ cp config.jsonc.example config.jsonc
 https://www.5eplay.com/player/11814738gjdwn7
 ```
 
-对应的 `USERID` 是 `11814738gjdwn7`。
+对应的 `userid` 是 `11814738gjdwn7`。
 
 ### 获取完美世界电竞 Steam ID 和 Access Token
 
 1. 登录完美世界电竞网页版或客户端。
 2. 打开浏览器开发者工具。
 3. 在 Network 请求或 Cookie 中查找已登录请求。
-4. 将 `PWA.DEFAULT_ACCESS_TOKEN` 和每个目标 `STEAMID` 填入 `config.jsonc`。
+4. 将 `pwa.default_access_token` 和每个目标 `steamid` 填入 `config.jsonc`。
 
 PWA Demo 下载链接现在会使用当前签名参数生成，并在最终文件请求中发送必要的 PWA 请求头。Access Token 可能会过期。如果 PWA 下载突然不可用，优先刷新 token。
 
-PWA 签名由私有编译 wheel `cs-demo-pwa-signer` 提供。公开 downloader 仓库不包含签名算法源码，只携带经过审计的编译产物。现在公开库会在 `src/cs_demo_downloader/_vendor/cs_demo_pwa_signer/` 下维护一个 manifest 驱动的 bundled signer 矩阵，运行时会按当前 Python / OS / CPU 标签选择匹配的编译扩展；在已覆盖的 bundled 运行时上，普通用户仍然只需要一次 `pip install`，不需要额外安装私有 wheel。维护者可以从私有 signer 仓库自动触发 workflow：Action 会构建 wheels、同步 `wheelhouse/`，并把刷新后的 vendored signer 产物提交回当前仓库。只有维护者在未覆盖运行时上做本地验证时，才需要使用 `docs/private-pwa-signer-wheel.md` 里的私有 wheel 兜底流程。
+PWA 签名由私有编译 wheel `cs-demo-pwa-signer` 提供。公开 downloader 仓库不包含签名算法源码。`s` 参数计算算法是由 Sisyphus 逆向得到的；为了减轻后续维护压力，现已将其打包至 wheel 包中，不会影响正常下载使用。使用 PWA 下载前需要先安装私有 wheel；wheel 的接口约定和发布前检查见 `docs/private-pwa-signer-wheel.md`。如果有其他项目希望不使用当前 pip 包实现 demo 下载功能，可以联系 `wangchudi666@gmail.com`。
 
-如果一个 PWA access token 可以访问多个目标 Steam 账号，把它写在 `PWA.DEFAULT_ACCESS_TOKEN`，然后为每个目标 `STEAMID` 添加一条 `PWA.USERS` 配置。单个目标也可以用自己的 `ACCESS_TOKEN` 覆盖默认 token。
+如果一个 PWA access token 可以访问多个目标 Steam 账号，把它写在 `pwa.default_access_token`，然后为每个目标 `steamid` 添加一条 `pwa.users` 配置。单个目标也可以用自己的 `access_token` 覆盖默认 token。
 
 ### 获取 Steam 官匹参数
 
 Steam 官匹下载使用 Valve 的 `ICSGOPlayers_730/GetNextMatchSharingCode/v1` Web API，需要：
 
-1. `STEAMID`：你的 SteamID64。
-2. `API_KEY`：Steam Web API Key，可在 `https://steamcommunity.com/dev/apikey` 申请。
-3. `STEAMIDKEY`：CS2/CS:GO 比赛分享设置中显示的认证 key。
-4. `KNOWNCODE`：一个已有的官匹比赛分享代码，用作向后获取新比赛的游标。
-Steam API 会基于 `KNOWNCODE` 返回下一个 share code，下载器可以本地迭代这些 share code。但 Steam Web API 本身不会返回最终 replay URL。真实 `.dem.bz2` 地址必须从 Steam Game Coordinator full match info 中读取，通常是比赛信息里的 `map` 字段。当前未配置 GC 解析器时，Steam 平台会明确提示无法解析真实 replay URL，而不会返回伪造下载地址。
+1. `steamid`：你的 SteamID64。
+2. `api_key`：Steam Web API Key，可在 `https://steamcommunity.com/dev/apikey` 申请。
+3. `steamidkey`：CS2/CS:GO 比赛分享设置中显示的认证 key。
+4. `knowncode`：一个已有的官匹比赛分享代码，用作向后获取新比赛的游标。
+Steam API 会基于 `knowncode` 返回下一个 share code，下载器可以本地迭代这些 share code。但 Steam Web API 本身不会返回最终 replay URL。真实 `.dem.bz2` 地址必须从 Steam Game Coordinator full match info 中读取，通常是比赛信息里的 `map` 字段。当前未配置 GC 解析器时，Steam 平台会明确提示无法解析真实 replay URL，而不会返回伪造下载地址。
 
 ### Steam Demo URL Resolver
 
 Steam 官匹提供两个 optional resolver 后端：
 
-- `boiler`：本机后端，调用 `akiver/boiler-writter`。要求本机 Steam 正在运行并已登录，不需要保存 Steam 密码，推荐本机 CLI 使用。配置 `STEAM.RESOLVER.TYPE = "boiler"`。设置 `STEAM.RESOLVER.AUTO_DOWNLOAD = "true"` 可自动下载最新 boiler-writter release 到本地缓存，也可以用 `STEAM.RESOLVER.EXECUTABLE_PATH` 指向手动安装的 binary。
+- `boiler`：本机后端，调用 `akiver/boiler-writter`。要求本机 Steam 正在运行并已登录，不需要保存 Steam 密码，推荐本机 CLI 使用。配置 `steam.resolver.type = "boiler"`。设置 `steam.resolver.auto_download = "true"` 可自动下载最新 boiler-writter release 到本地缓存，也可以用 `steam.resolver.executable_path` 指向手动安装的 binary。
 - `steam-login`：面向无头环境的后端，使用 optional `steam`/`csgo` 依赖连接 Game Coordinator。凭据只从 `STEAM_GC_USERNAME`、`STEAM_GC_PASSWORD` 等环境变量读取，不要写入配置文件。真实 Steam 登录仍需要可用账号，无法通过本地单元测试验证。
 
 Docker 镜像不会内置 `boiler-writter`，也不能直接使用本机 Steam resolver，除非你自己提供可用的 Steam 客户端环境。
@@ -185,13 +192,22 @@ pip install "cs-demo-downloader[steam-login] @ git+https://github.com/WangChuDi/
 
 未来发布到 PyPI 后，才可以使用 `pip install cs-demo-downloader` 这种包名安装方式。
 
-如果是从本仓库源码本地开发，使用 editable install。当前运行时若已被 bundled signer 矩阵覆盖，直接执行 `pip install -e .` 即可，不需要额外安装私有 signer wheel：
+如果是从本仓库源码本地开发，使用 editable install：
 
 ```bash
+pip install "$(python scripts/select_private_signer_wheel.py wheelhouse)"
 pip install -e .
 ```
 
-只有维护者在 bundled signer 矩阵没有覆盖当前运行时时，才需要额外安装私有 signer wheel；自动同步与本地兜底步骤见 `docs/private-pwa-signer-wheel.md`。公开测试会 mock 这个边界，并验证安装包里是否带有 manifest 与 vendored 二进制。
+Windows PowerShell：
+
+```powershell
+$wheel = python scripts/select_private_signer_wheel.py wheelhouse
+pip install $wheel
+pip install -e .
+```
+
+私有 signer wheel 只在真实 PWA 签名时需要；公开测试会 mock 这个边界。
 
 安装后会提供这个命令：
 
@@ -265,7 +281,7 @@ for match_id, demo_url in demo_urls.items():
 
 ### 完美世界电竞 / PWA
 
-PWA 下载需要 signed URL 和 PWA 下载请求头。生成的 URL 包含 `ACCESS_TOKEN`，不要打印或持久化保存。
+PWA 下载需要 signed URL 和 PWA 下载请求头。生成的 URL 包含 `access_token`，不要打印或持久化保存。
 
 ```python
 from cs_demo_downloader.core.downloader_pwa import (
@@ -335,10 +351,9 @@ dll_path = update_cached_pvp_alive_dll(target_path="cache/PvpAlive.dll", force=F
 print(dll_path)
 ```
 
-当前下载器会在维护者提供外部 native signer wheel 时优先使用它；否则回退到仓库中同步下来的 bundled signer 矩阵。如果明确需要 DLL fallback，可以把 `PWA.SIGNATURE_PROVIDER` 设置为以下值之一：
+当前下载器在所有平台默认使用私有编译 signer wheel。如果明确需要 DLL fallback，可以把 `pwa.signature_provider` 设置为以下值之一：
 
-- `native`：默认 native signer 路径，不使用 DLL 或 Wine。
-- `compiled`：`native` 的旧配置别名。
+- `compiled`：默认私有编译 wheel 签名，不使用 DLL 或 Wine。
 - `pvp_alive_native`：Windows 上直接调用包内 32 位 bridge。
 - `pvp_alive_wine`：Linux 上通过 Wine 调用包内 32 位 bridge。
 
@@ -370,7 +385,7 @@ signature = call_pvp_alive_swap_data_wine(
 )
 ```
 
-macOS 用户应使用同步下来的 bundled signer 二进制；维护者在未覆盖的 macOS 运行时做本地验证时，可以用匹配的私有 signer wheel 作为兜底。本项目不会内置 macOS Wine/QEMU fallback。
+macOS 用户应直接调用纯 Python 签名函数；本项目不会内置 macOS Wine/QEMU fallback。
 
 ## Docker 使用
 
@@ -390,7 +405,7 @@ docker pull ghcr.io/wangchudi/cs-demo-downloader:latest-wine
 
 Wine 镜像目前只构建 `linux/amd64`，因为包内 PWA bridge 是 32 位 Windows exe。
 
-也可以从本仓库本地构建镜像。Docker 构建会先从 `wheelhouse/` 安装匹配的同步 signer wheel，再安装 downloader 包；维护者在未覆盖目标上构建时，再把匹配的私有 signer wheel 放入 `wheelhouse/`：
+也可以从本仓库本地构建镜像：
 
 ```bash
 cp /path/to/cs_demo_pwa_signer-0.1.0-*.whl wheelhouse/
@@ -423,7 +438,7 @@ cs-demo-downloader download --all --config /config/config.jsonc --output /demos
 
 因为 Docker 使用显式配置路径，所以 `/config/config.jsonc` 必须存在且格式正确。
 
-默认 Linux 容器使用同步下来的 native signer 产物，不包含 Wine。如果你只是想刷新缓存 DLL，可以挂载 cache 目录并显式运行 updater：
+默认 Linux 容器使用私有编译 signer wheel，不包含 Wine。如果你只是想刷新缓存 DLL，可以挂载 cache 目录并显式运行 updater：
 
 ```bash
 docker run --rm \
@@ -432,7 +447,7 @@ docker run --rm \
   update-pvpalive-dll --target /cache/PvpAlive.dll
 ```
 
-如果要使用 Linux Wine bridge 镜像，请切换到 `-wine` tag，并在配置中设置 `"SIGNATURE_PROVIDER": "pvp_alive_wine"` 和 `"PVP_ALIVE_DLL": "/cache/PvpAlive.dll"`：
+如果要使用 Linux Wine bridge 镜像，请切换到 `-wine` tag，并在配置中设置 `"signature_provider": "pvp_alive_wine"` 和 `"pvp_alive_dll": "/cache/PvpAlive.dll"`：
 
 ```bash
 docker run --rm \
@@ -487,8 +502,8 @@ python3 -m compileall src tests cli.py
 - Demo 是否可下载取决于上游平台接口和账号权限。
 - 本地配置、Demo 文件和下载产物不会提交到 git。
 - `cache/` 或 `vendor/PvpAlive/` 下缓存的 `PvpAlive.dll` 会被 git 忽略，不应提交到仓库。
-- PWA 签名会在匹配运行时使用 bundled 编译 signer 矩阵；维护者仍可安装私有 `cs-demo-pwa-signer` wheel 做本地兜底验证。公开源码树不能包含 signer 算法源码，也不能发布该包的 sdist。
-- pip 包内包含 32 位 Windows C++ bridge exe，供显式 DLL fallback 使用。Linux 默认走 native signer 路径；只有显式使用 `pvp_alive_wine` provider 或 `*-wine` Docker 镜像时才会走 Wine。项目不会内置 QEMU fallback。
+- PWA 签名需要私有 `cs-demo-pwa-signer` wheel。公开源码树不能包含 signer 算法源码，也不能发布该包的 sdist。如果有其他项目希望不使用当前 pip 包实现 demo 下载功能，可以联系 `wangchudi666@gmail.com`。
+- pip 包内包含 32 位 Windows C++ bridge exe，供显式 DLL fallback 使用。Linux 默认使用私有编译 signer；只有显式使用 `pvp_alive_wine` provider 或 `*-wine` Docker 镜像时才会走 Wine。项目不会内置 QEMU fallback。
 
 ## 许可证
 

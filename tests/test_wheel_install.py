@@ -68,34 +68,6 @@ def _subprocess_env() -> dict[str, str]:
     return env
 
 
-def _copy_install_source(destination: Path) -> None:
-    _ = shutil.copytree(
-        REPO_ROOT,
-        destination,
-        ignore=shutil.ignore_patterns(
-            '.git',
-            '.sisyphus',
-            '.venv',
-            '__pycache__',
-            '.pytest_cache',
-            '.ruff_cache',
-            'build',
-            'cache',
-            'config.json',
-            'config.jsonc',
-            'demos',
-            'dist',
-            'env',
-            'private',
-            'vendor',
-            'venv',
-            'wheelhouse',
-            '*.egg-info',
-            '*.whl',
-        ),
-    )
-
-
 class PipInstallTests(unittest.TestCase):
     def run_command(
         self,
@@ -134,7 +106,31 @@ class PipInstallTests(unittest.TestCase):
             run_dir = temp_dir / 'run-from-outside-repo'
             source_dir = temp_dir / 'source'
             run_dir.mkdir()
-            _copy_install_source(source_dir)
+            _ = shutil.copytree(
+                REPO_ROOT,
+                source_dir,
+                ignore=shutil.ignore_patterns(
+                    '.git',
+                    '.sisyphus',
+                    '.venv',
+                    '__pycache__',
+                    '.pytest_cache',
+                    '.ruff_cache',
+                    'build',
+                    'cache',
+                    'config.json',
+                    'config.jsonc',
+                    'demos',
+                    'dist',
+                    'env',
+                    'private',
+                    'vendor',
+                    'venv',
+                    'wheelhouse',
+                    '*.egg-info',
+                    '*.whl',
+                ),
+            )
 
             # Install from the source copy with the same user-facing path as
             # `pip install .`, while keeping package index access disabled.
@@ -220,11 +216,20 @@ class PipInstallTests(unittest.TestCase):
             self.assertIsInstance(materialized_entries_value, list)
             materialized_entries = cast(list[object], materialized_entries_value)
             self.assertTrue(materialized_entries)
-            first_entry = cast(dict[str, object], materialized_entries[0])
+            matching_entries: list[dict[str, object]] = []
+            for entry_value in materialized_entries:
+                if not isinstance(entry_value, dict):
+                    continue
+                entry = cast(dict[str, object], entry_value)
+                if (
+                    entry['python_tag'] == 'cp312'
+                    and entry['platform_tag'] in {'linux_x86_64', 'manylinux_2_28_x86_64'}
+                    and entry['extension'] == 'cs_demo_pwa_signer.cpython-312-x86_64-linux-gnu.so'
+                ):
+                    matching_entries.append(entry)
+            self.assertTrue(matching_entries)
+            first_entry = matching_entries[0]
             self.assertTrue(first_entry['exists'])
-            self.assertEqual('cp312', first_entry['python_tag'])
-            self.assertEqual('linux_x86_64', first_entry['platform_tag'])
-            self.assertEqual('cs_demo_pwa_signer.cpython-312-x86_64-linux-gnu.so', first_entry['extension'])
             sha256_value_obj = first_entry['sha256']
             self.assertIsInstance(sha256_value_obj, str)
             sha256_value = cast(str, sha256_value_obj)
@@ -292,72 +297,7 @@ class PipInstallTests(unittest.TestCase):
                 self.assertTrue(_is_relative_to(signer_path, installed_package_root))
                 self.assertFalse(_is_relative_to(signer_path, REPO_ROOT))
                 self.assertFalse(_is_relative_to(signer_path, REPO_ROOT / 'src'))
-                self.assertIn('cp312-cp312-linux_x86_64', signer_path.parts)
-
-    def test_pip_install_dot_uses_build_isolation_to_install_wheel(self):
-        env = _subprocess_env()
-        _ = env.pop('PIP_NO_INDEX', None)
-
-        with tempfile.TemporaryDirectory() as temp_dir_name:
-            temp_dir = Path(temp_dir_name)
-            install_venv = temp_dir / 'install-venv'
-            run_dir = temp_dir / 'run-from-outside-repo'
-            source_dir = temp_dir / 'source'
-            run_dir.mkdir()
-            _copy_install_source(source_dir)
-
-            venv.EnvBuilder(with_pip=True).create(install_venv)
-            install_python = _venv_python(install_venv)
-
-            missing_wheel_probe = subprocess.run(
-                [str(install_python), '-m', 'pip', 'show', 'wheel'],
-                cwd=str(run_dir),
-                env=env,
-                capture_output=True,
-                text=True,
-                timeout=60,
-            )
-            self.assertNotEqual(0, missing_wheel_probe.returncode, missing_wheel_probe.stdout)
-
-            install = self.run_command(
-                [
-                    str(install_python),
-                    '-m',
-                    'pip',
-                    '--isolated',
-                    'install',
-                    '--verbose',
-                    '--no-deps',
-                    str(source_dir),
-                ],
-                cwd=run_dir,
-                env=env,
-            )
-
-            output = install.stdout + install.stderr
-            self.assertIn('Installing build dependencies', output)
-            self.assertIn('Building wheel for cs-demo-downloader', output)
-
-            installed_wheel_probe = subprocess.run(
-                [str(install_python), '-m', 'pip', 'show', 'wheel'],
-                cwd=str(run_dir),
-                env=env,
-                capture_output=True,
-                text=True,
-                timeout=60,
-            )
-            self.assertNotEqual(0, installed_wheel_probe.returncode, installed_wheel_probe.stdout)
-
-            probe = self.run_command(
-                [
-                    str(install_python),
-                    '-c',
-                    f"import importlib.metadata; import {IMPORT_NAME}; print(importlib.metadata.version('{DIST_NAME}'))",
-                ],
-                cwd=run_dir,
-                env=env,
-            )
-            self.assertEqual('0.1.0', probe.stdout.strip())
+                self.assertTrue({'cp312-cp312-linux_x86_64', 'cp312-cp312-manylinux_2_28_x86_64'} & set(signer_path.parts))
 
 
 if __name__ == '__main__':

@@ -1,13 +1,184 @@
 {
   "entries": [
     {
+      "abi_tag": "cp310",
+      "directory": "cp310-cp310-macosx_10_12_x86_64",
+      "extension": "cs_demo_pwa_signer.cpython-310-darwin.so",
+      "platform_tag": "macosx_10_12_x86_64",
+      "python_tag": "cp310",
+      "sha256": "4d6922186eb129f1d1420f9222d3e2641159e856c0f2fcb35e5e2a2969fe7a94",
+      "wheel": "cs_demo_pwa_signer-0.1.0-cp310-cp310-macosx_10_12_x86_64.whl"
+    },
+    {
+      "abi_tag": "cp310",
+      "directory": "cp310-cp310-macosx_11_0_arm64",
+      "extension": "cs_demo_pwa_signer.cpython-310-darwin.so",
+      "platform_tag": "macosx_11_0_arm64",
+      "python_tag": "cp310",
+      "sha256": "73eda5543bb2ac78dafe160094e3c2094dc9c6bcd5c1fa17b09aebe151b1fec2",
+      "wheel": "cs_demo_pwa_signer-0.1.0-cp310-cp310-macosx_11_0_arm64.whl"
+    },
+    {
+      "abi_tag": "cp310",
+      "directory": "cp310-cp310-manylinux_2_28_aarch64",
+      "extension": "cs_demo_pwa_signer.cpython-310-aarch64-linux-gnu.so",
+      "platform_tag": "manylinux_2_28_aarch64",
+      "python_tag": "cp310",
+      "sha256": "1d5049a7e3fd92e35c7bd2a11f050539e3be9c000be4c644bf7b6ef048e55522",
+      "wheel": "cs_demo_pwa_signer-0.1.0-cp310-cp310-manylinux_2_28_aarch64.whl"
+    },
+    {
+      "abi_tag": "cp310",
+      "directory": "cp310-cp310-manylinux_2_28_x86_64",
+      "extension": "cs_demo_pwa_signer.cpython-310-x86_64-linux-gnu.so",
+      "platform_tag": "manylinux_2_28_x86_64",
+      "python_tag": "cp310",
+      "sha256": "ec9a9fe2df28d9b36b339b679848d32362016d9221030f78274d174e1246cfb4",
+      "wheel": "cs_demo_pwa_signer-0.1.0-cp310-cp310-manylinux_2_28_x86_64.whl"
+    },
+    {
+      "abi_tag": "cp310",
+      "directory": "cp310-cp310-win_amd64",
+      "extension": "cs_demo_pwa_signer.cp310-win_amd64.pyd",
+      "platform_tag": "win_amd64",
+      "python_tag": "cp310",
+      "sha256": "822242283ed7030d7ce641419ebffa7f594103d6358178bef48536958b56d7a8",
+      "wheel": "cs_demo_pwa_signer-0.1.0-cp310-cp310-win_amd64.whl"
+    },
+    {
+      "abi_tag": "cp311",
+      "directory": "cp311-cp311-macosx_10_12_x86_64",
+      "extension": "cs_demo_pwa_signer.cpython-311-darwin.so",
+      "platform_tag": "macosx_10_12_x86_64",
+      "python_tag": "cp311",
+      "sha256": "9cff4504f876538eb3957ef9578eda19fd40cbe14871cf587991243771bbd07f",
+      "wheel": "cs_demo_pwa_signer-0.1.0-cp311-cp311-macosx_10_12_x86_64.whl"
+    },
+    {
+      "abi_tag": "cp311",
+      "directory": "cp311-cp311-macosx_11_0_arm64",
+      "extension": "cs_demo_pwa_signer.cpython-311-darwin.so",
+      "platform_tag": "macosx_11_0_arm64",
+      "python_tag": "cp311",
+      "sha256": "9cc114a059b436d80c2a1856a8b6ea9a058e2947a420c7b2a8f05978b2c45420",
+      "wheel": "cs_demo_pwa_signer-0.1.0-cp311-cp311-macosx_11_0_arm64.whl"
+    },
+    {
+      "abi_tag": "cp311",
+      "directory": "cp311-cp311-manylinux_2_28_aarch64",
+      "extension": "cs_demo_pwa_signer.cpython-311-aarch64-linux-gnu.so",
+      "platform_tag": "manylinux_2_28_aarch64",
+      "python_tag": "cp311",
+      "sha256": "cb9feeefa535c351090ec8414aa82b6a303c8e60bd9ae778eba81843f4197f69",
+      "wheel": "cs_demo_pwa_signer-0.1.0-cp311-cp311-manylinux_2_28_aarch64.whl"
+    },
+    {
+      "abi_tag": "cp311",
+      "directory": "cp311-cp311-manylinux_2_28_x86_64",
+      "extension": "cs_demo_pwa_signer.cpython-311-x86_64-linux-gnu.so",
+      "platform_tag": "manylinux_2_28_x86_64",
+      "python_tag": "cp311",
+      "sha256": "f324178883264fa3c8e7a82be9d068c298e4d8ff12fe5ef9f03fd8938728e704",
+      "wheel": "cs_demo_pwa_signer-0.1.0-cp311-cp311-manylinux_2_28_x86_64.whl"
+    },
+    {
+      "abi_tag": "cp311",
+      "directory": "cp311-cp311-win_amd64",
+      "extension": "cs_demo_pwa_signer.cp311-win_amd64.pyd",
+      "platform_tag": "win_amd64",
+      "python_tag": "cp311",
+      "sha256": "b825578085843e08cf5c85c567c9f519ef6237359a695cf939ba07270f1f8347",
+      "wheel": "cs_demo_pwa_signer-0.1.0-cp311-cp311-win_amd64.whl"
+    },
+    {
       "abi_tag": "cp312",
-      "directory": "cp312-cp312-linux_x86_64",
-      "extension": "cs_demo_pwa_signer.cpython-312-x86_64-linux-gnu.so",
-      "platform_tag": "linux_x86_64",
+      "directory": "cp312-cp312-macosx_10_13_x86_64",
+      "extension": "cs_demo_pwa_signer.cpython-312-darwin.so",
+      "platform_tag": "macosx_10_13_x86_64",
       "python_tag": "cp312",
-      "sha256": "febff583cd05d20ce804384795eebd5ffd33d1aea15ada89cb5c66f0667435a5",
-      "wheel": "cs_demo_pwa_signer-0.1.0-cp312-cp312-linux_x86_64.whl"
+      "sha256": "49c4bad8b339f54d4d40ff1f08660e4628abd9c0267a99e98a5440c2d3771918",
+      "wheel": "cs_demo_pwa_signer-0.1.0-cp312-cp312-macosx_10_13_x86_64.whl"
+    },
+    {
+      "abi_tag": "cp312",
+      "directory": "cp312-cp312-macosx_11_0_arm64",
+      "extension": "cs_demo_pwa_signer.cpython-312-darwin.so",
+      "platform_tag": "macosx_11_0_arm64",
+      "python_tag": "cp312",
+      "sha256": "68a3cfa2d9f16a39dec338608cce274a516cad5fd0a4cd27b0d2661590f43335",
+      "wheel": "cs_demo_pwa_signer-0.1.0-cp312-cp312-macosx_11_0_arm64.whl"
+    },
+    {
+      "abi_tag": "cp312",
+      "directory": "cp312-cp312-manylinux_2_28_aarch64",
+      "extension": "cs_demo_pwa_signer.cpython-312-aarch64-linux-gnu.so",
+      "platform_tag": "manylinux_2_28_aarch64",
+      "python_tag": "cp312",
+      "sha256": "92eeccc4f1c08628b04c10d393fbc08e28c81d97cbd25aaba2131d253e91d2af",
+      "wheel": "cs_demo_pwa_signer-0.1.0-cp312-cp312-manylinux_2_28_aarch64.whl"
+    },
+    {
+      "abi_tag": "cp312",
+      "directory": "cp312-cp312-manylinux_2_28_x86_64",
+      "extension": "cs_demo_pwa_signer.cpython-312-x86_64-linux-gnu.so",
+      "platform_tag": "manylinux_2_28_x86_64",
+      "python_tag": "cp312",
+      "sha256": "1b658979beb56f2c7504ad7948e5fe515ac2b765755ddd20d29547870e499469",
+      "wheel": "cs_demo_pwa_signer-0.1.0-cp312-cp312-manylinux_2_28_x86_64.whl"
+    },
+    {
+      "abi_tag": "cp312",
+      "directory": "cp312-cp312-win_amd64",
+      "extension": "cs_demo_pwa_signer.cp312-win_amd64.pyd",
+      "platform_tag": "win_amd64",
+      "python_tag": "cp312",
+      "sha256": "87054bea0d2cb891d799c61c42d18aae4dd0c3bb23423d9bd7f1d7fb86e608b2",
+      "wheel": "cs_demo_pwa_signer-0.1.0-cp312-cp312-win_amd64.whl"
+    },
+    {
+      "abi_tag": "cp39",
+      "directory": "cp39-cp39-macosx_10_12_x86_64",
+      "extension": "cs_demo_pwa_signer.cpython-39-darwin.so",
+      "platform_tag": "macosx_10_12_x86_64",
+      "python_tag": "cp39",
+      "sha256": "bab50e4fb54d71247e0feecc9c422ef8f9ab77de58c6ae3608860983a404606d",
+      "wheel": "cs_demo_pwa_signer-0.1.0-cp39-cp39-macosx_10_12_x86_64.whl"
+    },
+    {
+      "abi_tag": "cp39",
+      "directory": "cp39-cp39-macosx_11_0_arm64",
+      "extension": "cs_demo_pwa_signer.cpython-39-darwin.so",
+      "platform_tag": "macosx_11_0_arm64",
+      "python_tag": "cp39",
+      "sha256": "5933ae937ffbe3ea1cba91ee6b7613729f3b119f0c9d1fe2aaf16b7b894e4ce4",
+      "wheel": "cs_demo_pwa_signer-0.1.0-cp39-cp39-macosx_11_0_arm64.whl"
+    },
+    {
+      "abi_tag": "cp39",
+      "directory": "cp39-cp39-manylinux_2_28_aarch64",
+      "extension": "cs_demo_pwa_signer.cpython-39-aarch64-linux-gnu.so",
+      "platform_tag": "manylinux_2_28_aarch64",
+      "python_tag": "cp39",
+      "sha256": "b67816abe05370163da7eaac8c2dbccc3ff275203f8399bfdd336cc27adf8a78",
+      "wheel": "cs_demo_pwa_signer-0.1.0-cp39-cp39-manylinux_2_28_aarch64.whl"
+    },
+    {
+      "abi_tag": "cp39",
+      "directory": "cp39-cp39-manylinux_2_28_x86_64",
+      "extension": "cs_demo_pwa_signer.cpython-39-x86_64-linux-gnu.so",
+      "platform_tag": "manylinux_2_28_x86_64",
+      "python_tag": "cp39",
+      "sha256": "890c0e2cdc17fc4319c886a80b66ae340786874345f4771dbe6439d17f8e05c3",
+      "wheel": "cs_demo_pwa_signer-0.1.0-cp39-cp39-manylinux_2_28_x86_64.whl"
+    },
+    {
+      "abi_tag": "cp39",
+      "directory": "cp39-cp39-win_amd64",
+      "extension": "cs_demo_pwa_signer.cp39-win_amd64.pyd",
+      "platform_tag": "win_amd64",
+      "python_tag": "cp39",
+      "sha256": "07e9a452b8e8815952dc1536e642bc4ad62f4018c2305390cbadc334f99d1fbe",
+      "wheel": "cs_demo_pwa_signer-0.1.0-cp39-cp39-win_amd64.whl"
     }
   ],
   "package": "cs_demo_pwa_signer"

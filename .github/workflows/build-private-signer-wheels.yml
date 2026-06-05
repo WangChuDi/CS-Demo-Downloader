@@ -15,6 +15,25 @@ on:
         options:
           - "false"
           - "true"
+      sync_public_repo:
+        description: Sync wheelhouse and bundled signer fallback into this repository
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
+      sync_mode:
+        description: How to update this repository when sync_public_repo is true
+        required: false
+        default: pull-request
+        type: choice
+        options:
+          - pull-request
+          - commit
+  repository_dispatch:
+    types:
+      - pwa-signer-updated
 
 env:
   PYTHONUTF8: "1"
@@ -27,12 +46,156 @@ env:
   CIBW_ENVIRONMENT_MACOS: "MACOSX_DEPLOYMENT_TARGET=10.12"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
+  prepare-inputs:
+    runs-on: ubuntu-latest
+    outputs:
+      signer_ref: ${{ steps.normalize.outputs.signer_ref }}
+      upload_release: ${{ steps.normalize.outputs.upload_release }}
+      sync_public_repo: ${{ steps.normalize.outputs.sync_public_repo }}
+      sync_mode: ${{ steps.normalize.outputs.sync_mode }}
+      source_event: ${{ steps.normalize.outputs.source_event }}
+      source_ref: ${{ steps.normalize.outputs.source_ref }}
+      source_run: ${{ steps.normalize.outputs.source_run }}
+
+    steps:
+      - name: Normalize workflow inputs
+        id: normalize
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          DISPATCH_SIGNER_REF: ${{ github.event.client_payload.signer_ref || '' }}
+          DISPATCH_SOURCE_REF: ${{ github.event.client_payload.source_ref || github.event.client_payload.ref || '' }}
+          DISPATCH_SOURCE_EVENT: ${{ github.event.client_payload.source_event || github.event_name }}
+          DISPATCH_SOURCE_RUN: ${{ github.event.client_payload.source_run || github.event.client_payload.source_run_url || '' }}
+          DISPATCH_UPLOAD_RELEASE: ${{ github.event.client_payload.upload_release }}
+          DISPATCH_SYNC_PUBLIC_REPO: ${{ github.event.client_payload.sync_public_repo }}
+          DISPATCH_SYNC_MODE: ${{ github.event.client_payload.sync_mode || '' }}
+          MANUAL_SIGNER_REF: ${{ inputs.signer_ref || '' }}
+          MANUAL_UPLOAD_RELEASE: ${{ inputs.upload_release || '' }}
+          MANUAL_SYNC_PUBLIC_REPO: ${{ inputs.sync_public_repo || '' }}
+          MANUAL_SYNC_MODE: ${{ inputs.sync_mode || '' }}
+          WORKFLOW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+
+          normalize_bool() {
+            local raw="${1:-}"
+            local default_value="$2"
+            raw="$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]')"
+            case "$raw" in
+              '')
+                printf '%s\n' "$default_value"
+                ;;
+              true|1|yes|y|on)
+                printf 'true\n'
+                ;;
+              false|0|no|n|off)
+                printf 'false\n'
+                ;;
+              *)
+                printf 'Unsupported boolean value: %s\n' "$1" >&2
+                exit 1
+                ;;
+            esac
+          }
+
+          normalize_sync_mode() {
+            local raw="${1:-}"
+            local default_value="$2"
+            raw="$(printf '%s' "$raw" | tr '[:upper:]' '[:lower:]')"
+            case "$raw" in
+              '')
+                printf '%s\n' "$default_value"
+                ;;
+              commit|direct-commit|direct_commit)
+                printf 'commit\n'
+                ;;
+              pull-request|pull_request|pr)
+                printf 'pull-request\n'
+                ;;
+              *)
+                printf 'Unsupported sync_mode value: %s\n' "$1" >&2
+                exit 1
+                ;;
+            esac
+          }
+
+          validate_ref_like() {
+            local value="$1"
+            local field_name="$2"
+            if [[ -z "$value" ]]; then
+              printf '%s must not be empty\n' "$field_name" >&2
+              exit 1
+            fi
+            if [[ "$value" =~ [[:space:]] ]]; then
+              printf '%s must not contain whitespace\n' "$field_name" >&2
+              exit 1
+            fi
+            if [[ "$value" == -* ]]; then
+              printf '%s must not start with -\n' "$field_name" >&2
+              exit 1
+            fi
+            if [[ "$value" == *..* || "$value" == *~* || "$value" == *^* || "$value" == *:* || "$value" == *\\* || "$value" == *\?* || "$value" == *\[* || "$value" == *@{* || "$value" == */ || "$value" == */*/*/../* ]]; then
+              printf '%s contains forbidden git revision syntax\n' "$field_name" >&2
+              exit 1
+            fi
+            if [[ ! "$value" =~ ^[A-Za-z0-9._/-]{1,200}$ ]]; then
+              printf '%s contains unsupported characters\n' "$field_name" >&2
+              exit 1
+            fi
+          }
+
+          validate_output_scalar() {
+            local value="$1"
+            local field_name="$2"
+            if [[ "$value" == *$'\n'* || "$value" == *$'\r'* ]]; then
+              printf '%s must not contain newlines\n' "$field_name" >&2
+              exit 1
+            fi
+          }
+
+          if [[ "$EVENT_NAME" == 'repository_dispatch' ]]; then
+            signer_ref="${DISPATCH_SIGNER_REF:-}"
+            upload_release="$(normalize_bool "${DISPATCH_UPLOAD_RELEASE:-}" 'false')"
+            sync_public_repo="$(normalize_bool "${DISPATCH_SYNC_PUBLIC_REPO:-}" 'true')"
+            sync_mode="$(normalize_sync_mode "${DISPATCH_SYNC_MODE:-}" 'commit')"
+            source_event="${DISPATCH_SOURCE_EVENT:-repository_dispatch}"
+            source_ref="${DISPATCH_SOURCE_REF:-$signer_ref}"
+            source_run="${DISPATCH_SOURCE_RUN:-$WORKFLOW_RUN_URL}"
+          else
+            signer_ref="${MANUAL_SIGNER_REF:-main}"
+            upload_release="$(normalize_bool "${MANUAL_UPLOAD_RELEASE:-}" 'false')"
+            sync_public_repo="$(normalize_bool "${MANUAL_SYNC_PUBLIC_REPO:-}" 'false')"
+            sync_mode="$(normalize_sync_mode "${MANUAL_SYNC_MODE:-}" 'pull-request')"
+            source_event='workflow_dispatch'
+            source_ref="$signer_ref"
+            source_run="$WORKFLOW_RUN_URL"
+          fi
+
+          validate_ref_like "$signer_ref" 'signer_ref'
+          validate_ref_like "$source_ref" 'source_ref'
+          validate_output_scalar "$source_event" 'source_event'
+          validate_output_scalar "$source_run" 'source_run'
+
+          {
+            printf 'signer_ref=%s\n' "$signer_ref"
+            printf 'upload_release=%s\n' "$upload_release"
+            printf 'sync_public_repo=%s\n' "$sync_public_repo"
+            printf 'sync_mode=%s\n' "$sync_mode"
+            printf 'source_event=%s\n' "$source_event"
+            printf 'source_ref=%s\n' "$source_ref"
+            printf 'source_run=%s\n' "$source_run"
+          } >> "$GITHUB_OUTPUT"
+
   build:
+    needs: prepare-inputs
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -55,6 +218,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           path: downloader
+          persist-credentials: false
 
       - name: Validate private signer secrets
         shell: bash
@@ -66,9 +230,10 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ${{ secrets.PWA_SIGNER_REPOSITORY }}
-          ref: ${{ inputs.signer_ref }}
+          ref: ${{ needs.prepare-inputs.outputs.signer_ref }}
           token: ${{ secrets.PWA_SIGNER_REPOSITORY_TOKEN }}
           path: signer
+          persist-credentials: false
 
       - name: Set up Python
         uses: actions/setup-python@v5
@@ -105,8 +270,144 @@ jobs:
           if-no-files-found: error
           retention-days: 30
 
+  upload-release:
+    if: ${{ needs.prepare-inputs.outputs.upload_release == 'true' && startsWith(github.ref, 'refs/tags/') }}
+    needs:
+      - prepare-inputs
+      - build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download built signer wheel artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: cs-demo-pwa-signer-wheels-*
+          merge-multiple: true
+          path: artifacts/wheelhouse
+
       - name: Attach wheels to GitHub release
-        if: ${{ inputs.upload_release == 'true' && startsWith(github.ref, 'refs/tags/') }}
         uses: softprops/action-gh-release@v2
         with:
-          files: wheelhouse/*.whl
+          files: artifacts/wheelhouse/*.whl
+
+  sync-public-repo:
+    if: ${{ needs.prepare-inputs.outputs.sync_public_repo == 'true' }}
+    needs:
+      - prepare-inputs
+      - build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Check out downloader repository
+        uses: actions/checkout@v4
+        with:
+          path: downloader
+          ref: ${{ github.event.repository.default_branch }}
+
+      - name: Validate private signer secrets
+        shell: bash
+        run: |
+          test -n "${{ secrets.PWA_SIGNER_REPOSITORY }}"
+          test -n "${{ secrets.PWA_SIGNER_REPOSITORY_TOKEN }}"
+
+      - name: Download built signer wheel artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: cs-demo-pwa-signer-wheels-*
+          merge-multiple: true
+          path: artifacts/wheelhouse
+
+      - name: Check out private signer repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ secrets.PWA_SIGNER_REPOSITORY }}
+          ref: ${{ needs.prepare-inputs.outputs.signer_ref }}
+          token: ${{ secrets.PWA_SIGNER_REPOSITORY_TOKEN }}
+          path: signer
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Verify downloaded wheels contain no source
+        shell: bash
+        run: python downloader/scripts/verify_private_signer_wheel.py artifacts/wheelhouse/*.whl
+
+      - name: Sync public wheelhouse and bundled signer fallback matrix
+        shell: bash
+        run: python downloader/scripts/sync_private_signer_artifacts.py --repo downloader --wheelhouse artifacts/wheelhouse --expected-count 20
+
+      - name: Resolve private signer commit
+        id: signer-sha
+        shell: bash
+        run: |
+          set -euo pipefail
+          printf 'sha=%s\n' "$(git -C signer rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - name: Commit synced signer artifacts to current repository
+        if: ${{ needs.prepare-inputs.outputs.sync_mode == 'commit' }}
+        shell: bash
+        working-directory: downloader
+        env:
+          SOURCE_EVENT: ${{ needs.prepare-inputs.outputs.source_event }}
+          SOURCE_REF: ${{ needs.prepare-inputs.outputs.source_ref }}
+          SOURCE_RUN: ${{ needs.prepare-inputs.outputs.source_run }}
+          SIGNER_REF: ${{ needs.prepare-inputs.outputs.signer_ref }}
+          SIGNER_SHA: ${{ steps.signer-sha.outputs.sha }}
+          PUBLIC_RUN: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          set -euo pipefail
+
+          changed_paths="$(git status --porcelain -- wheelhouse src/cs_demo_downloader/_vendor/cs_demo_pwa_signer)"
+          if [[ -z "$changed_paths" ]]; then
+            printf 'No signer artifact changes to commit.\n'
+            exit 0
+          fi
+
+          git add -A wheelhouse src/cs_demo_downloader/_vendor/cs_demo_pwa_signer
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit \
+            -m 'chore: update bundled signer artifacts' \
+            -m "Source event: ${SOURCE_EVENT}" \
+            -m "Source ref: ${SOURCE_REF}" \
+            -m "Source run: ${SOURCE_RUN}" \
+            -m "Requested private signer ref: ${SIGNER_REF}" \
+            -m "Resolved private signer SHA: ${SIGNER_SHA}" \
+            -m "Public workflow run: ${PUBLIC_RUN}"
+          git push origin "HEAD:${DEFAULT_BRANCH}"
+
+      - name: Create pull request with updated signer artifacts
+        if: ${{ needs.prepare-inputs.outputs.sync_mode == 'pull-request' }}
+        uses: peter-evans/create-pull-request@v7
+        with:
+          path: downloader
+          branch: automation/update-bundled-signer-${{ github.run_id }}
+          delete-branch: true
+          add-paths: |
+            wheelhouse
+            src/cs_demo_downloader/_vendor/cs_demo_pwa_signer
+          commit-message: "chore: update bundled signer artifacts"
+          title: "chore: update bundled signer artifacts"
+          body: |
+            Automated update from `build-private-signer-wheels.yml`.
+
+            - copied built `cs-demo-pwa-signer` wheels into `wheelhouse/`
+            - refreshed the bundled signer fallback matrix under `src/cs_demo_downloader/_vendor/cs_demo_pwa_signer/`
+            - synchronized the current private signer wheel matrix into `wheelhouse/`
+            - source event: `${{ needs.prepare-inputs.outputs.source_event }}`
+            - source ref: `${{ needs.prepare-inputs.outputs.source_ref }}`
+            - source run: `${{ needs.prepare-inputs.outputs.source_run }}`
+            - requested private signer ref: `${{ needs.prepare-inputs.outputs.signer_ref }}`
+            - resolved private signer SHA: `${{ steps.signer-sha.outputs.sha }}`
+            - public workflow run: `${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}`
+            - public workflow ref: `${{ github.workflow_ref }}`
+            - public workflow sha: `${{ github.sha }}`

@@ -9,7 +9,7 @@ CS Demo Downloader downloads Counter-Strike demo files from supported Chinese CS
 - [Quick Start](#quick-start)
 - [Supported Platforms](#supported-platforms)
 - [Configuration](#configuration)
-- [Install from GitHub](#install-from-github)
+- [Install](#install)
 - [CLI Usage](#cli-usage)
 - [Docker Usage](#docker-usage)
 - [Python API Usage](#python-api-usage)
@@ -226,25 +226,29 @@ pip install -e .[steam-login]
 
 </details>
 
-## Install from GitHub
+## Install
 
-This project is not published to PyPI yet, so install it directly from the public GitHub repository:
+Install the latest release from PyPI:
 
 ```bash
-pip install git+https://github.com/WangChuDi/CS-Demo-Downloader.git
+pip install cs-demo-downloader
 ```
 
 Optional extras:
 
 ```bash
 # Steam official matchmaking resolver using local Steam + boiler-writter parser deps
-pip install "cs-demo-downloader[steam-boiler] @ git+https://github.com/WangChuDi/CS-Demo-Downloader.git"
+pip install "cs-demo-downloader[steam-boiler]"
 
 # Steam official matchmaking resolver using steam-login/csgo GC deps
-pip install "cs-demo-downloader[steam-login] @ git+https://github.com/WangChuDi/CS-Demo-Downloader.git"
+pip install "cs-demo-downloader[steam-login]"
 ```
 
-After a future PyPI release, the package name will be installable with `pip install cs-demo-downloader`.
+You can also install the current main branch directly from GitHub:
+
+```bash
+pip install git+https://github.com/WangChuDi/CS-Demo-Downloader.git
+```
 
 For local development from this repository, use editable installs instead:
 

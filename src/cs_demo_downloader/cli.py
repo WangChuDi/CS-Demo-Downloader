@@ -5,20 +5,43 @@ CS Demo Downloader - 命令行入口
 """
 import argparse
 import json
-import sys
 import os
+import signal
+import sys
+import threading
+from collections.abc import Mapping
+from dataclasses import dataclass
+from types import FrameType
 from typing import Callable
 
-from .core.config import load_config, Config, ConfigLoadError
+from .core.config import Config, ConfigLoadError, load_config
 from .core.downloader_5e import get_all_demo_urls as get_5e_demos
-from .core.downloader_pwa import get_all_demo_urls as get_pwa_demos
 from .core.downloader_pwa import build_download_headers as build_pwa_download_headers
+from .core.downloader_pwa import get_all_demo_urls as get_pwa_demos
 from .core.downloader_steam import get_all_demo_urls as get_steam_demos
 from .core.utils import download_and_extract, redact_url
 from .pwa_dll_updater import LATEST_YML_URL, PvpAliveUpdateError, update_cached_pvp_alive_dll
 
 
 PwaDemoSigner = Callable[[str, str, str], str]
+VALID_PLATFORMS = ('5e', 'pwa', 'steam')
+SCHEDULE_PLATFORM_VALUES = ('all', *VALID_PLATFORMS)
+TRUE_VALUES = {'1', 'true', 'yes', 'on'}
+FALSE_VALUES = {'0', 'false', 'no', 'off', ''}
+
+
+class SchedulerConfigError(ValueError):
+    """Raised when scheduler settings are invalid."""
+
+
+@dataclass
+class SchedulerSettings:
+    enabled: bool = False
+    interval_seconds: int = 86400
+    run_on_start: bool = False
+    config_path: str | None = None
+    output_path: str | None = None
+    platforms: str | list[str] | None = None
 
 
 def print_progress(downloaded: int, total: int):
@@ -37,21 +60,21 @@ def download_5e_demos(config: Config):
     if not users:
         print("No 5E users configured.")
         return
-    
+
     for user in users:
         print(f"\n=== Downloading 5E demos for {user.label} ===")
         demo_urls = get_5e_demos(user.userid)
-        
+
         if not demo_urls:
             print(f"No demos found for {user.label}")
             continue
-        
+
         print(f"Found {len(demo_urls)} demos")
-        
+
         for match_id, demo_url in demo_urls.items():
             print(f"\nMatch {match_id}: {demo_url}")
             download_and_extract(demo_url, config.download_path, print_progress)
-            print()  # 换行
+            print()
 
 
 def download_pwa_demos(config: Config):
@@ -60,7 +83,7 @@ def download_pwa_demos(config: Config):
     if not users:
         print("No PWA users configured.")
         return
-    
+
     for user in users:
         print(f"\n=== Downloading PWA demos for {user.label} ===")
         try:
@@ -69,13 +92,13 @@ def download_pwa_demos(config: Config):
             print(f"Unable to configure PWA signer for {user.label}: {e}", file=sys.stderr)
             continue
         demo_urls = get_pwa_demos(user.steamid, user.access_token, signer=signer)
-        
+
         if not demo_urls:
             print(f"No demos found for {user.label}")
             continue
-        
+
         print(f"Found {len(demo_urls)} demos")
-        
+
         for match_id, demo_url in demo_urls.items():
             print(f"\nMatch {match_id}: {redact_url(demo_url)}")
             try:
@@ -84,7 +107,7 @@ def download_pwa_demos(config: Config):
                 print(f"Unable to build PWA download headers for {user.label}: {e}", file=sys.stderr)
                 continue
             download_and_extract(demo_url, config.download_path, print_progress, headers=headers)
-            print()  # 换行
+            print()
 
 
 def build_pwa_demo_url_signer(config: Config) -> PwaDemoSigner | None:
@@ -133,7 +156,10 @@ def build_pwa_demo_url_signer(config: Config) -> PwaDemoSigner | None:
 
         return wine_signer
 
-    message = f"Unsupported PWA signature_provider '{provider}'. Use 'compiled', 'pvp_alive_native', or 'pvp_alive_wine'."
+    message = (
+        f"Unsupported PWA signature_provider '{provider}'. "
+        "Use 'compiled', 'pvp_alive_native', or 'pvp_alive_wine'."
+    )
     raise RuntimeError(message)
 
 
@@ -201,17 +227,368 @@ def download_steam_demos(config: Config):
         for match_id, demo_url in demo_urls.items():
             print(f"\nMatch {match_id}: {demo_url}")
             download_and_extract(demo_url, config.download_path, print_progress)
-            print()  # 换行
+            print()
 
 
-def main():
+def run_download(config: Config, output_path: str | None = None, platforms: list[str] | None = None) -> int:
+    if output_path:
+        config.download_path = output_path
+
+    if not config.download_path:
+        config.download_path = os.path.join(os.getcwd(), 'demos')
+
+    try:
+        os.makedirs(config.download_path, exist_ok=True)
+    except OSError as e:
+        print(f"Error creating download path '{config.download_path}': {e}", file=sys.stderr)
+        return 1
+
+    print(f"Download path: {config.download_path}")
+
+    selected_platforms = platforms or list(VALID_PLATFORMS)
+    for platform in selected_platforms:
+        if platform == '5e':
+            download_5e_demos(config)
+        elif platform == 'pwa':
+            download_pwa_demos(config)
+        elif platform == 'steam':
+            download_steam_demos(config)
+
+    print("\n=== Download complete ===")
+    return 0
+
+
+def run_download_command(
+    config_path: str | None,
+    output_path: str | None,
+    platform: str | None,
+    all_platforms: bool,
+) -> int:
+    try:
+        config = load_config(config_path)
+    except ConfigLoadError as e:
+        print(e, file=sys.stderr)
+        return 1
+
+    platforms = None if all_platforms or platform is None else [platform]
+    return run_download(config, output_path=output_path, platforms=platforms)
+
+
+def _parse_bool(value: object, field_name: str) -> bool:
+    if isinstance(value, bool):
+        return value
+
+    normalized = str(value).strip().lower()
+    if normalized in TRUE_VALUES:
+        return True
+    if normalized in FALSE_VALUES:
+        return False
+    raise SchedulerConfigError(f"Invalid boolean for {field_name}: {value}")
+
+
+def _parse_positive_int(value: object, field_name: str) -> int:
+    try:
+        parsed = int(str(value).strip())
+    except ValueError as e:
+        raise SchedulerConfigError(f"{field_name} must be a positive integer") from e
+
+    if parsed <= 0:
+        raise SchedulerConfigError(f"{field_name} must be a positive integer")
+    return parsed
+
+
+def _env_value(env: Mapping[str, str], *names: str) -> str | None:
+    for name in names:
+        if name in env:
+            return env[name]
+    return None
+
+
+def _scheduler_value(config: Config, *names: str) -> object | None:
+    scheduler = config.scheduler or {}
+    for name in names:
+        value = scheduler.get(name)
+        if value is not None:
+            return value
+    return None
+
+
+def _normalize_platforms(value: object, field_name: str) -> str | list[str] | None:
+    if isinstance(value, str):
+        raw_values = value.split(',')
+    elif isinstance(value, (list, tuple)):
+        raw_values = value
+    else:
+        raise SchedulerConfigError(
+            f"Invalid scheduler platform '{value}'. Use values from: {', '.join(SCHEDULE_PLATFORM_VALUES)}."
+        )
+
+    platforms: list[str] = []
+    for raw_value in raw_values:
+        platform = str(raw_value).strip().lower()
+        if not platform:
+            continue
+        if platform == 'all':
+            if len([item for item in raw_values if str(item).strip()]) > 1:
+                raise SchedulerConfigError(
+                    f"Invalid scheduler platform '{value}'. Use 'all' alone or values from: {', '.join(VALID_PLATFORMS)}."
+                )
+            return None
+        if platform not in VALID_PLATFORMS:
+            raise SchedulerConfigError(
+                f"Invalid scheduler platform '{platform}'. Use values from: {', '.join(SCHEDULE_PLATFORM_VALUES)}."
+            )
+        if platform not in platforms:
+            platforms.append(platform)
+
+    if not platforms:
+        raise SchedulerConfigError(
+            f"Invalid scheduler platform '{value}'. Use values from: {', '.join(SCHEDULE_PLATFORM_VALUES)}."
+        )
+    if len(platforms) == 1:
+        return platforms[0]
+    return platforms
+
+
+def _platform_list(value: str | list[str] | None) -> list[str] | None:
+    if value is None:
+        return None
+    if isinstance(value, list):
+        return value
+    return [value]
+
+
+def _resolve_interval_seconds(
+    cli_interval: int | None,
+    env: Mapping[str, str],
+    config: Config,
+) -> int:
+    if cli_interval is not None:
+        return _parse_positive_int(cli_interval, 'interval_seconds')
+
+    env_seconds = _env_value(env, 'CS_DEMO_SCHEDULE_INTERVAL_SECONDS')
+    if env_seconds is not None:
+        return _parse_positive_int(env_seconds, 'CS_DEMO_SCHEDULE_INTERVAL_SECONDS')
+
+    env_minutes = _env_value(env, 'CS_DEMO_SCHEDULE_INTERVAL_MINUTES')
+    if env_minutes is not None:
+        return _parse_positive_int(env_minutes, 'CS_DEMO_SCHEDULE_INTERVAL_MINUTES') * 60
+
+    env_hours = _env_value(env, 'CS_DEMO_SCHEDULE_INTERVAL_HOURS')
+    if env_hours is not None:
+        return _parse_positive_int(env_hours, 'CS_DEMO_SCHEDULE_INTERVAL_HOURS') * 3600
+
+    config_interval = _scheduler_value(config, 'interval_seconds')
+    if config_interval is not None:
+        return _parse_positive_int(config_interval, 'scheduler.interval_seconds')
+
+    return 86400
+
+
+def resolve_scheduler_settings(
+    config_path: str | None = None,
+    output_path: str | None = None,
+    platforms: str | None = None,
+    enabled: bool | None = None,
+    interval_seconds: int | None = None,
+    run_on_start: bool | None = None,
+    env: Mapping[str, str] | None = None,
+    base_config: Config | None = None,
+) -> SchedulerSettings:
+    env_map = os.environ if env is None else env
+    explicit_enabled = enabled
+    env_enabled = None
+    if explicit_enabled is None:
+        env_enabled = _env_value(env_map, 'CS_DEMO_SCHEDULE_ENABLED')
+        if env_enabled is not None:
+            explicit_enabled = _parse_bool(env_enabled, 'enabled')
+
+    if explicit_enabled is False and base_config is None:
+        disabled_platforms = platforms or _env_value(
+            env_map,
+            'CS_DEMO_SCHEDULE_PLATFORMS',
+            'CS_DEMO_SCHEDULE_PLATFORM',
+        )
+        return SchedulerSettings(
+            enabled=False,
+            interval_seconds=86400,
+            run_on_start=False,
+            config_path=config_path or _env_value(env_map, 'CS_DEMO_SCHEDULE_CONFIG'),
+            output_path=output_path or _env_value(env_map, 'CS_DEMO_SCHEDULE_OUTPUT'),
+            platforms=_normalize_platforms(disabled_platforms, 'platforms') if disabled_platforms is not None else None,
+        )
+
+    env_config_path = _env_value(env_map, 'CS_DEMO_SCHEDULE_CONFIG')
+    schedule_config_path = config_path or env_config_path
+    config = base_config if base_config is not None else load_config(schedule_config_path)
+
+    resolved_config_path = config_path or env_config_path or str(_scheduler_value(config, 'config') or '') or None
+    resolved_output_path = (
+        output_path
+        or _env_value(env_map, 'CS_DEMO_SCHEDULE_OUTPUT')
+        or str(_scheduler_value(config, 'output') or '')
+        or None
+    )
+
+    platform_value = (
+        platforms
+        or _env_value(env_map, 'CS_DEMO_SCHEDULE_PLATFORMS', 'CS_DEMO_SCHEDULE_PLATFORM')
+        or _scheduler_value(config, 'platforms', 'platform')
+    )
+    resolved_platforms = _normalize_platforms(platform_value, 'platforms') if platform_value is not None else None
+
+    if enabled is not None:
+        resolved_enabled = enabled
+    else:
+        env_enabled = _env_value(env_map, 'CS_DEMO_SCHEDULE_ENABLED')
+        config_enabled = _scheduler_value(config, 'enabled')
+        resolved_enabled = _parse_bool(env_enabled if env_enabled is not None else config_enabled or False, 'enabled')
+
+    if run_on_start is not None:
+        resolved_run_on_start = run_on_start
+    else:
+        env_run_on_start = _env_value(env_map, 'CS_DEMO_SCHEDULE_RUN_ON_START')
+        config_run_on_start = _scheduler_value(config, 'run_on_start')
+        resolved_run_on_start = _parse_bool(
+            env_run_on_start if env_run_on_start is not None else config_run_on_start or False,
+            'run_on_start',
+        )
+
+    return SchedulerSettings(
+        enabled=resolved_enabled,
+        interval_seconds=_resolve_interval_seconds(interval_seconds, env_map, config),
+        run_on_start=resolved_run_on_start,
+        config_path=resolved_config_path,
+        output_path=resolved_output_path,
+        platforms=resolved_platforms,
+    )
+
+
+def _install_signal_handlers(stop_event: threading.Event):
+    def handle_shutdown(signum: int, _frame: FrameType | None):
+        signal_name = signal.Signals(signum).name
+        print(f"Received {signal_name}, stopping scheduler.")
+        stop_event.set()
+
+    for signal_name in ('SIGINT', 'SIGTERM'):
+        shutdown_signal = getattr(signal, signal_name, None)
+        if shutdown_signal is not None:
+            signal.signal(shutdown_signal, handle_shutdown)
+
+
+def _run_scheduled_download(settings: SchedulerSettings) -> int:
+    platform_list = _platform_list(settings.platforms)
+    if platform_list is None:
+        return run_download_command(settings.config_path, settings.output_path, None, True)
+    if len(platform_list) == 1:
+        return run_download_command(settings.config_path, settings.output_path, platform_list[0], False)
+
+    try:
+        config = load_config(settings.config_path)
+    except ConfigLoadError as e:
+        print(e, file=sys.stderr)
+        return 1
+    return run_download(config, output_path=settings.output_path, platforms=platform_list)
+
+
+def run_schedule_command(
+    config_path: str | None = None,
+    output_path: str | None = None,
+    platforms: str | None = None,
+    enabled: bool | None = None,
+    interval_seconds: int | None = None,
+    run_on_start: bool | None = None,
+    env: Mapping[str, str] | None = None,
+    stop_event: threading.Event | None = None,
+    install_signal_handlers: bool = True,
+    run_once: bool = False,
+) -> int:
+    try:
+        settings = resolve_scheduler_settings(
+            config_path=config_path,
+            output_path=output_path,
+            platforms=platforms,
+            enabled=enabled,
+            interval_seconds=interval_seconds,
+            run_on_start=run_on_start,
+            env=env,
+        )
+    except (ConfigLoadError, SchedulerConfigError) as e:
+        print(e, file=sys.stderr)
+        return 1
+
+    event = stop_event or threading.Event()
+
+    if not settings.enabled:
+        print(
+            "Scheduler disabled. Container is idle. "
+            "Set CS_DEMO_SCHEDULE_ENABLED=true or scheduler.enabled=true to enable automatic downloads."
+        )
+        if run_once:
+            return 0
+        if install_signal_handlers:
+            _install_signal_handlers(event)
+        event.wait()
+        return 0
+
+    if install_signal_handlers:
+        _install_signal_handlers(event)
+
+    print(
+        "Scheduler enabled: interval_seconds="
+        f"{settings.interval_seconds}, run_on_start={settings.run_on_start}, "
+        f"platforms={','.join(_platform_list(settings.platforms) or list(VALID_PLATFORMS))}."
+    )
+
+    if settings.run_on_start:
+        print('Running scheduled download immediately on startup.')
+        exit_code = _run_scheduled_download(settings)
+        if run_once:
+            return exit_code
+        if exit_code != 0:
+            return exit_code
+    else:
+        print('Run-on-start disabled. First download will wait for the next interval.')
+
+    while not event.wait(settings.interval_seconds):
+        exit_code = _run_scheduled_download(settings)
+        if run_once:
+            return exit_code
+        if exit_code != 0:
+            return exit_code
+
+    return 0
+
+
+def load_scheduler_settings(args: argparse.Namespace) -> SchedulerSettings:
+    return resolve_scheduler_settings(
+        config_path=args.config,
+        output_path=getattr(args, 'output', None),
+        platforms=getattr(args, 'platforms', None),
+        enabled=getattr(args, 'enabled', None),
+        interval_seconds=getattr(args, 'interval_seconds', None),
+        run_on_start=getattr(args, 'run_on_start', None),
+    )
+
+
+def run_scheduler(args: argparse.Namespace) -> int:
+    return run_schedule_command(
+        config_path=args.config,
+        output_path=getattr(args, 'output', None),
+        platforms=getattr(args, 'platforms', None),
+        enabled=getattr(args, 'enabled', None),
+        interval_seconds=getattr(args, 'interval_seconds', None),
+        run_on_start=getattr(args, 'run_on_start', None),
+    )
+
+
+def main(argv: list[str] | None = None):
     parser = argparse.ArgumentParser(
         description='CS Demo Downloader - 下载 5E、完美世界和 Steam 官匹 CS2 Demo'
     )
-    
+
     subparsers = parser.add_subparsers(dest='command', help='可用命令')
-    
-    # download 命令
+
     download_parser = subparsers.add_parser('download', help='下载 Demo')
     download_parser.add_argument(
         '--all', action='store_true',
@@ -228,6 +605,32 @@ def main():
     download_parser.add_argument(
         '--output', type=str,
         help='下载目录（覆盖配置文件中的设置）'
+    )
+
+    schedule_parser = subparsers.add_parser('schedule', help='启动内部定时下载调度器')
+    schedule_parser.add_argument(
+        '--config', type=str,
+        help='调度配置文件路径；也可使用 CS_DEMO_SCHEDULE_CONFIG'
+    )
+    schedule_parser.add_argument(
+        '--output', type=str,
+        help='下载目录；也可使用 CS_DEMO_SCHEDULE_OUTPUT'
+    )
+    schedule_parser.add_argument(
+        '--platforms', type=str,
+        help='逗号分隔的平台列表，例如 5e,pwa,steam；也可使用 CS_DEMO_SCHEDULE_PLATFORMS'
+    )
+    schedule_parser.add_argument(
+        '--enabled', action='store_true', default=None,
+        help='启用定时下载；也可使用 CS_DEMO_SCHEDULE_ENABLED=true'
+    )
+    schedule_parser.add_argument(
+        '--interval-seconds', type=int,
+        help='定时下载间隔秒数；也可使用 CS_DEMO_SCHEDULE_INTERVAL_SECONDS'
+    )
+    schedule_parser.add_argument(
+        '--run-on-start', action='store_true', default=None,
+        help='启动调度器后立即运行一次；也可使用 CS_DEMO_SCHEDULE_RUN_ON_START=true'
     )
 
     pvp_alive_parser = subparsers.add_parser(
@@ -255,48 +658,21 @@ def main():
         action='store_true',
         help='即使缓存版本已是最新也强制重新下载 DLL'
     )
-    
-    args = parser.parse_args()
-    
+
+    args = parser.parse_args(argv)
+
     if args.command == 'download':
-        # 加载配置
-        try:
-            config = load_config(args.config)
-        except ConfigLoadError as e:
-            print(e, file=sys.stderr)
-            return 1
-        
-        # 覆盖下载路径
-        if args.output:
-            config.download_path = args.output
-        
-        # 确保下载路径存在
-        if not config.download_path:
-            config.download_path = os.path.join(os.getcwd(), 'demos')
-
-        try:
-            os.makedirs(config.download_path, exist_ok=True)
-        except OSError as e:
-            print(f"Error creating download path '{config.download_path}': {e}", file=sys.stderr)
-            return 1
-
-        print(f"Download path: {config.download_path}")
-        
-        # 执行下载
-        if args.all or args.platform is None:
-            download_5e_demos(config)
-            download_pwa_demos(config)
-            download_steam_demos(config)
-        elif args.platform == '5e':
-            download_5e_demos(config)
-        elif args.platform == 'pwa':
-            download_pwa_demos(config)
-        elif args.platform == 'steam':
-            download_steam_demos(config)
-        
-        print("\n=== Download complete ===")
-        return 0
-    elif args.command == 'update-pvpalive-dll':
+        return run_download_command(args.config, args.output, args.platform, args.all)
+    if args.command == 'schedule':
+        return run_schedule_command(
+            config_path=args.config,
+            output_path=args.output,
+            platforms=args.platforms,
+            enabled=args.enabled,
+            interval_seconds=args.interval_seconds,
+            run_on_start=args.run_on_start,
+        )
+    if args.command == 'update-pvpalive-dll':
         try:
             dll_path = update_cached_pvp_alive_dll(
                 latest_yml_url=args.latest_yml_url,
@@ -310,9 +686,9 @@ def main():
 
         print(f"Updated PvpAlive.dll: {dll_path}")
         return 0
-    else:
-        parser.print_help()
-        return 0
+
+    parser.print_help()
+    return 0
 
 
 if __name__ == '__main__':

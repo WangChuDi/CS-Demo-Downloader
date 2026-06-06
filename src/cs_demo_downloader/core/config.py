@@ -55,6 +55,7 @@ class Config:
     steam_resolver: Dict[str, str] = field(default_factory=dict)
     steam_gc: Dict[str, str] = field(default_factory=dict)
     pwa: Dict[str, str] = field(default_factory=dict)
+    scheduler: Dict[str, Any] = field(default_factory=dict)
     users_5e: List[Dict[str, str]] = field(default_factory=list)
     users_pwa: List[Dict[str, str]] = field(default_factory=list)
     users_steam: List[Dict[str, str]] = field(default_factory=list)
@@ -201,6 +202,7 @@ def _normalize_config_data(data: Dict[str, Any]) -> Dict[str, Any]:
         for key, value in pwa.items()
         if key != 'users' and value is not None
     }
+    scheduler_config = dict(data.get('scheduler', {}) or {})
 
     users_pwa = [_normalize_user_label(user) for user in pwa.get('users', data.get('users_pwa', []))]
     default_access_token = pwa_config.get('default_access_token', '')
@@ -213,6 +215,7 @@ def _normalize_config_data(data: Dict[str, Any]) -> Dict[str, Any]:
         'steam_resolver': steam.get('resolver', data.get('steam_resolver', {})) or {},
         'steam_gc': steam.get('gc', data.get('steam_gc', {})) or {},
         'pwa': pwa_config,
+        'scheduler': scheduler_config,
         'users_5e': [_normalize_user_label(user) for user in five_e.get('users', data.get('users_5e', []))],
         'users_pwa': users_pwa,
         'users_steam': [_normalize_user_label(user) for user in steam.get('users', data.get('users_steam', []))],
@@ -270,6 +273,7 @@ def save_config(config: Config, config_path: Optional[str] = None):
         with open(config_path, 'w', encoding='utf-8') as f:
             data = {
                 'download_path': config.download_path,
+                'scheduler': config.scheduler,
                 'five_e': {'users': config.users_5e},
                 'pwa': {**config.pwa, 'users': config.users_pwa},
                 'steam': {

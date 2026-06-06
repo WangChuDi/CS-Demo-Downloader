@@ -161,6 +161,30 @@ class LoadConfigTests(unittest.TestCase):
         self.assertEqual('legacy', user.label)
         self.assertEqual('legacy', user.name)
 
+    def test_load_config_reads_scheduler_section(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_path = os.path.join(temp_dir, 'config.jsonc')
+            with open(config_path, 'w', encoding='utf-8') as config_file:
+                config_file.write('''{
+  "scheduler": {
+    "enabled": true,
+    "interval_seconds": 300,
+    "run_on_start": true,
+    "config": "/config/config.jsonc",
+    "output": "/demos",
+    "platforms": ["pwa", "steam"]
+  }
+}''')
+
+            config = load_config(config_path)
+
+        self.assertEqual(True, config.scheduler['enabled'])
+        self.assertEqual(300, config.scheduler['interval_seconds'])
+        self.assertEqual(True, config.scheduler['run_on_start'])
+        self.assertEqual('/config/config.jsonc', config.scheduler['config'])
+        self.assertEqual('/demos', config.scheduler['output'])
+        self.assertEqual(['pwa', 'steam'], config.scheduler['platforms'])
+
 
 class CliTests(unittest.TestCase):
     def test_cli_returns_non_zero_for_explicit_missing_config(self):
@@ -175,6 +199,102 @@ class CliTests(unittest.TestCase):
         self.assertNotEqual(exit_code, 0)
         self.assertIn('Config file not found', stderr.getvalue())
         self.assertEqual('', stdout.getvalue())
+
+    def test_scheduler_env_overrides_config(self):
+        config = Config(
+            scheduler={
+                'enabled': False,
+                'interval_seconds': 300,
+                'run_on_start': False,
+                'config': '/config/from-config.jsonc',
+                'output': '/from-config',
+                'platforms': ['5e'],
+            }
+        )
+
+        with mock.patch.dict(os.environ, {
+            'CS_DEMO_SCHEDULE_ENABLED': 'true',
+            'CS_DEMO_SCHEDULE_INTERVAL_SECONDS': '45',
+            'CS_DEMO_SCHEDULE_RUN_ON_START': 'yes',
+            'CS_DEMO_SCHEDULE_CONFIG': '/config/from-env.jsonc',
+            'CS_DEMO_SCHEDULE_OUTPUT': '/from-env',
+            'CS_DEMO_SCHEDULE_PLATFORMS': 'pwa,steam',
+        }, clear=True):
+            settings = cli.resolve_scheduler_settings(base_config=config)
+
+        self.assertTrue(settings.enabled)
+        self.assertEqual(45, settings.interval_seconds)
+        self.assertTrue(settings.run_on_start)
+        self.assertEqual('/config/from-env.jsonc', settings.config_path)
+        self.assertEqual('/from-env', settings.output_path)
+        self.assertEqual(['pwa', 'steam'], settings.platforms)
+
+    def test_scheduler_disabled_does_not_call_download_helper(self):
+        stdout = io.StringIO()
+
+        stop_event = mock.Mock()
+        stop_event.wait.return_value = True
+
+        with mock.patch('cs_demo_downloader.cli.threading.Event', return_value=stop_event):
+            with mock.patch('cs_demo_downloader.cli.signal.signal'):
+                with mock.patch('cs_demo_downloader.cli.run_download') as run_download:
+                    with mock.patch.dict(os.environ, {}, clear=True):
+                        with redirect_stdout(stdout):
+                            exit_code = cli.run_schedule_command(stop_event=stop_event)
+
+        self.assertEqual(0, exit_code)
+        run_download.assert_not_called()
+        self.assertIn('Scheduler disabled. Container is idle.', stdout.getvalue())
+        stop_event.wait.assert_called_once_with()
+
+    def test_scheduler_enabled_run_on_start_calls_download_helper_once(self):
+        config = Config(download_path='.', scheduler={})
+        stdout = io.StringIO()
+
+        stop_event = mock.Mock()
+        stop_event.wait.side_effect = [True]
+
+        with mock.patch('cs_demo_downloader.cli.threading.Event', return_value=stop_event):
+            with mock.patch('cs_demo_downloader.cli.signal.signal'):
+                with mock.patch('cs_demo_downloader.cli.load_config', return_value=config) as load_config:
+                    with mock.patch('cs_demo_downloader.cli.run_download', return_value=0) as run_download:
+                        with mock.patch.dict(os.environ, {}, clear=True):
+                            with redirect_stdout(stdout):
+                                exit_code = cli.run_schedule_command(
+                                    config_path='/config/config.jsonc',
+                                    output_path='/demos',
+                                    platforms='pwa,steam',
+                                    enabled=True,
+                                    interval_seconds=60,
+                                    run_on_start=True,
+                                    stop_event=stop_event,
+                                )
+
+        self.assertEqual(0, exit_code)
+        self.assertEqual(2, load_config.call_count)
+        run_download.assert_called_once_with(config, output_path='/demos', platforms=['pwa', 'steam'])
+        self.assertIn('Running scheduled download immediately on startup.', stdout.getvalue())
+        self.assertEqual([60], [call.args[0] for call in stop_event.wait.call_args_list])
+
+    def test_scheduler_rejects_invalid_interval(self):
+        stderr = io.StringIO()
+
+        with mock.patch.dict(os.environ, {}, clear=True):
+            with redirect_stderr(stderr):
+                exit_code = cli.run_schedule_command(enabled=True, interval_seconds=0, run_once=True)
+
+        self.assertEqual(1, exit_code)
+        self.assertIn('positive integer', stderr.getvalue())
+
+    def test_scheduler_rejects_invalid_platforms(self):
+        stderr = io.StringIO()
+
+        with mock.patch.dict(os.environ, {}, clear=True):
+            with redirect_stderr(stderr):
+                exit_code = cli.run_schedule_command(enabled=True, interval_seconds=60, platforms='pwa,invalid', run_once=True)
+
+        self.assertEqual(1, exit_code)
+        self.assertIn('Invalid scheduler platform', stderr.getvalue())
 
 
 class DownloadFileTests(unittest.TestCase):

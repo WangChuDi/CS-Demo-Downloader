@@ -61,6 +61,14 @@ cp config.jsonc.example config.jsonc
 {
   // "." 表示下载到当前运行目录。
   "download_path": ".",
+  "scheduler": {
+    "enabled": false,
+    "interval_seconds": 86400,
+    "run_on_start": false,
+    "config": "/config/config.jsonc",
+    "output": "/demos",
+    "platforms": "all"
+  },
   "five_e": {
     "users": [
       {
@@ -224,6 +232,7 @@ pip install -e .
 ```bash
 cs-demo-downloader --help
 cs-demo-downloader download --help
+cs-demo-downloader schedule --help
 ```
 
 下载所有已配置平台：
@@ -265,6 +274,14 @@ cs-demo-downloader download --all --config config.jsonc --output ./demos
 ```
 
 当显式传入 `--config` 时，如果该文件不存在或 JSON 格式错误，CLI 会输出错误并返回非零退出码。这是为了让 Docker、cron、CI 等自动化环境能及时发现配置问题。
+
+前台运行内置 scheduler：
+
+```bash
+cs-demo-downloader schedule --config config.jsonc --enabled --interval-seconds 86400 --run-on-start
+```
+
+默认情况下，scheduler 不会自动下载，只会打印空闲提示并等待 `SIGINT` 或 `SIGTERM`。只有在 CLI 参数、环境变量或可选的 `scheduler` 配置段里显式启用后，才会自动下载。
 
 ## Python API 使用
 
@@ -425,7 +442,7 @@ cp config.jsonc.example config/config.jsonc
 # 运行前请编辑 config/config.jsonc。
 ```
 
-运行一次下载：
+默认启动容器：
 
 ```bash
 docker run --rm \
@@ -434,13 +451,40 @@ docker run --rm \
   ghcr.io/wangchudi/cs-demo-downloader:latest
 ```
 
+默认镜像现在执行 `cs-demo-downloader schedule`，启动后保持空闲，除非显式启用内部调度。因为禁用状态下不会读取 `/config/config.jsonc`，所以它可以只作为一个装好依赖的运行环境启动。
+
+手动执行一次下载：
+
+```bash
+docker run --rm \
+  -v "$(pwd)/config:/config" \
+  -v "$(pwd)/demos:/demos" \
+  ghcr.io/wangchudi/cs-demo-downloader:latest \
+  download --all --config /config/config.jsonc --output /demos
+```
+
 Docker 默认入口命令等价于：
 
 ```bash
-cs-demo-downloader download --all --config /config/config.jsonc --output /demos
+cs-demo-downloader schedule
 ```
 
-因为 Docker 使用显式配置路径，所以 `/config/config.jsonc` 必须存在且格式正确。
+通过环境变量启用自动定时下载：
+
+```bash
+docker run --rm \
+  -e CS_DEMO_SCHEDULE_ENABLED=true \
+  -e CS_DEMO_SCHEDULE_CONFIG=/config/config.jsonc \
+  -e CS_DEMO_SCHEDULE_OUTPUT=/demos \
+  -e CS_DEMO_SCHEDULE_INTERVAL_SECONDS=86400 \
+  -e CS_DEMO_SCHEDULE_RUN_ON_START=false \
+  -e CS_DEMO_SCHEDULE_PLATFORMS=all \
+  -v "$(pwd)/config:/config" \
+  -v "$(pwd)/demos:/demos" \
+  ghcr.io/wangchudi/cs-demo-downloader:latest
+```
+
+同样的调度设置也可以写在 `config.jsonc` 的可选 `scheduler` 段中，环境变量优先级更高。
 
 默认 Linux 容器使用私有编译 signer wheel，不包含 Wine。如果你只是想刷新缓存 DLL，可以挂载 cache 目录并显式运行 updater：
 
@@ -464,21 +508,29 @@ docker run --rm \
 ### Docker Compose
 
 ```bash
-docker compose run --rm cs-demo-downloader
+docker compose up -d cs-demo-downloader
 ```
 
-`docker-compose.yml` 默认使用 `ghcr.io/wangchudi/cs-demo-downloader:latest`，并挂载 `./config`、`./demos` 和 `./cache`。运行 Wine 变体：
+`docker-compose.yml` 默认使用 `ghcr.io/wangchudi/cs-demo-downloader:latest`，并挂载 `./config`、`./demos` 和 `./cache`。Compose 默认也是空闲 scheduler 模式。需要自动下载时，取消注释 compose 文件中的示例环境变量即可。
+
+手动执行一次下载：
 
 ```bash
-docker compose --profile wine run --rm cs-demo-downloader-wine
+docker compose run --rm cs-demo-downloader download --all --config /config/config.jsonc --output /demos
+```
+
+启动 Wine 变体：
+
+```bash
+docker compose --profile wine up -d cs-demo-downloader-wine
 ```
 
 ## 定时自动下载
 
-每天凌晨 3 点运行的 crontab 示例：
+你可以使用内置 scheduler，也可以继续使用 cron 等外部调度。下面是每天凌晨 3 点执行一次性下载的 crontab 示例：
 
 ```cron
-0 3 * * * docker run --rm -v /home/user/config:/config -v /home/user/demos:/demos ghcr.io/wangchudi/cs-demo-downloader:latest
+0 3 * * * docker run --rm -v /home/user/config:/config -v /home/user/demos:/demos ghcr.io/wangchudi/cs-demo-downloader:latest download --all --config /config/config.jsonc --output /demos
 ```
 
 请确认 `/home/user/config/config.jsonc` 已存在。

@@ -2,6 +2,20 @@
   // Demo download directory. "." means the current working directory.
   "download_path": ".",
 
+  "scheduler": {
+    // Disabled by default. Used by `cs-demo-downloader schedule`.
+    "enabled": "false",
+    // Fixed interval between automatic downloads. Must be a positive integer.
+    "interval_seconds": "86400",
+    // Set true to run one download immediately when the scheduler starts.
+    "run_on_start": "false",
+    // One of: "all", "5e", "pwa", "steam".
+    "platforms": "all",
+    // Optional config/output paths for scheduled Docker runs.
+    "config": "/config/config.jsonc",
+    "output": "/demos"
+  },
+
   "five_e": {
     "users": [
       {

@@ -41,7 +41,7 @@ No other platforms are implemented at the moment.
 
 ## Quick Start
 
-Use Docker if you want the simplest scheduled/server setup:
+Use Docker if you want the simplest installed/server setup:
 
 ```bash
 mkdir -p config demos
@@ -53,6 +53,8 @@ docker run --rm \
   -v "$(pwd)/demos:/demos" \
   ghcr.io/wangchudi/cs-demo-downloader:latest
 ```
+
+The container now starts in idle scheduler mode by default. It does not download demos until you explicitly enable scheduling or run a manual `download` command.
 
 Use a local Python install if you want CLI/API development from a clone:
 
@@ -110,6 +112,14 @@ Example schema:
 {
   // "." downloads into the current working directory.
   "download_path": ".",
+  "scheduler": {
+    "enabled": false,
+    "interval_seconds": 86400,
+    "run_on_start": false,
+    "config": "/config/config.jsonc",
+    "output": "/demos",
+    "platforms": "all"
+  },
   "five_e": {
     "users": [
       {
@@ -282,6 +292,7 @@ Common commands:
 | Download 5EPlay only | `cs-demo-downloader download --platform 5e --config config.jsonc` |
 | Download PWA only | `cs-demo-downloader download --platform pwa --config config.jsonc` |
 | Download Steam only | `cs-demo-downloader download --platform steam --config config.jsonc` |
+| Start internal scheduler | `cs-demo-downloader schedule --config config.jsonc` |
 | Refresh cached PWA DLL manually | `cs-demo-downloader update-pvpalive-dll --target cache/PvpAlive.dll` |
 
 <details>
@@ -292,6 +303,7 @@ Show help:
 ```bash
 cs-demo-downloader --help
 cs-demo-downloader download --help
+cs-demo-downloader schedule --help
 ```
 
 Download all configured platforms:
@@ -331,6 +343,14 @@ Override the configured download directory:
 ```bash
 cs-demo-downloader download --all --config config.jsonc --output ./demos
 ```
+
+Run the internal scheduler in foreground mode:
+
+```bash
+cs-demo-downloader schedule --config config.jsonc --enabled --interval-seconds 86400 --run-on-start
+```
+
+The scheduler stays idle by default and prints an idle message until it receives `SIGINT` or `SIGTERM`. Automatic downloads are opt-in through CLI flags, environment variables, or the optional `scheduler` config section.
 
 When `--config` is provided explicitly, the CLI exits with a non-zero status if that file is missing or invalid. This is intentional so Docker, cron, and other automation can detect configuration problems.
 
@@ -491,7 +511,7 @@ docker pull ghcr.io/wangchudi/cs-demo-downloader:latest-wine
 
 The Wine image is currently built for `linux/amd64` only because the packaged PWA bridge is a 32-bit Windows executable.
 
-Run once with mounted config and output directories:
+Start the default container with mounted config and output directories:
 
 ```bash
 mkdir -p config demos
@@ -504,7 +524,7 @@ docker run --rm \
   ghcr.io/wangchudi/cs-demo-downloader:latest
 ```
 
-Because Docker uses an explicit config path, `/config/config.jsonc` must exist and be valid.
+By default, the image runs `cs-demo-downloader schedule` and stays idle unless scheduling is explicitly enabled. Because disabled scheduler mode does not load `/config/config.jsonc`, the container can be started as a prepared environment without a config file.
 
 <details>
 <summary>Local Docker builds, Wine image, and Compose</summary>
@@ -525,20 +545,38 @@ cp config.jsonc.example config/config.jsonc
 # Edit config/config.jsonc before running the container.
 ```
 
-Run once:
+Run one manual download on demand:
 
 ```bash
 docker run --rm \
   -v "$(pwd)/config:/config" \
   -v "$(pwd)/demos:/demos" \
-  ghcr.io/wangchudi/cs-demo-downloader:latest
+  ghcr.io/wangchudi/cs-demo-downloader:latest \
+  download --all --config /config/config.jsonc --output /demos
 ```
 
 The Docker entrypoint runs:
 
 ```bash
-cs-demo-downloader download --all --config /config/config.jsonc --output /demos
+cs-demo-downloader schedule
 ```
+
+Enable automatic scheduled downloads with environment variables:
+
+```bash
+docker run --rm \
+  -e CS_DEMO_SCHEDULE_ENABLED=true \
+  -e CS_DEMO_SCHEDULE_CONFIG=/config/config.jsonc \
+  -e CS_DEMO_SCHEDULE_OUTPUT=/demos \
+  -e CS_DEMO_SCHEDULE_INTERVAL_SECONDS=86400 \
+  -e CS_DEMO_SCHEDULE_RUN_ON_START=false \
+  -e CS_DEMO_SCHEDULE_PLATFORMS=all \
+  -v "$(pwd)/config:/config" \
+  -v "$(pwd)/demos:/demos" \
+  ghcr.io/wangchudi/cs-demo-downloader:latest
+```
+
+You can also store the same scheduler settings in the optional `scheduler` section of `config.jsonc`. Environment variables override config values.
 
 The default Linux container uses the private compiled signer wheel and does not include Wine. If you want to refresh a cached DLL, mount a cache directory and run the updater explicitly:
 
@@ -562,26 +600,32 @@ docker run --rm \
 ### Docker Compose
 
 ```bash
-docker compose run --rm cs-demo-downloader
+docker compose up -d cs-demo-downloader
 ```
 
-`docker-compose.yml` uses `ghcr.io/wangchudi/cs-demo-downloader:latest` by default and mounts `./config`, `./demos`, and `./cache`. To run the Wine variant:
+`docker-compose.yml` uses `ghcr.io/wangchudi/cs-demo-downloader:latest` by default, starts in idle scheduler mode, and mounts `./config`, `./demos`, and `./cache`. Uncomment the example scheduler environment variables in the compose file to opt in to automatic downloads. Run one manual download through Compose with:
 
 ```bash
-docker compose --profile wine run --rm cs-demo-downloader-wine
+docker compose run --rm cs-demo-downloader download --all --config /config/config.jsonc --output /demos
+```
+
+To start the Wine variant:
+
+```bash
+docker compose --profile wine up -d cs-demo-downloader-wine
 ```
 
 </details>
 
 ## Scheduled Downloads
 
-Example crontab entry for a daily 03:00 run:
+Use either the built-in scheduler or an external scheduler such as cron. Example crontab entry for a daily 03:00 one-shot run:
 
 ```cron
-0 3 * * * docker run --rm -v /home/user/config:/config -v /home/user/demos:/demos ghcr.io/wangchudi/cs-demo-downloader:latest
+0 3 * * * docker run --rm -v /home/user/config:/config -v /home/user/demos:/demos ghcr.io/wangchudi/cs-demo-downloader:latest download --all --config /config/config.jsonc --output /demos
 ```
 
-Make sure `/home/user/config/config.jsonc` exists before scheduling the job.
+Make sure `/home/user/config/config.jsonc` exists before scheduling the one-shot job.
 
 ## Tests
 

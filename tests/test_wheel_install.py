@@ -205,7 +205,7 @@ class PipInstallTests(unittest.TestCase):
             self.assertIsInstance(package_file_value, str)
             package_file = Path(cast(str, package_file_value))
 
-            self.assertEqual('0.1.0', metadata['version'])
+            self.assertEqual('0.1.1', metadata['version'])
             self.assertTrue(metadata['bridge_exists'])
             self.assertFalse(metadata['cpp_exists'])
             manifest_entry_count_value = metadata['manifest_entry_count']

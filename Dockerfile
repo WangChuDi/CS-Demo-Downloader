@@ -28,4 +28,4 @@ ENV DEMO_PATH=/demos
 USER appuser
 
 ENTRYPOINT ["cs-demo-downloader"]
-CMD ["download", "--all", "--config", "/config/config.jsonc", "--output", "/demos"]
+CMD ["schedule"]

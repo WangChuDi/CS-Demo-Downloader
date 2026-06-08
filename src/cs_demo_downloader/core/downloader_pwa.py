@@ -25,6 +25,12 @@ PWA_MATCH_REPORT_URL = 'https://pwaweblogin.wmpvp.com/match-api/report'
 PWA_MATCH_ROUND_SIMPLE_LIST_URL = 'https://pwaweblogin.wmpvp.com/match-api/match-round-simple-list'
 PWA_PERFECT_MOMENT_URL_PREFIX = 'https://pwacdn.wmpvp.com/client/perfectmoment'
 PWA_WEB_API_APPID = 20000
+PWA_USER_MATCH_LIST_GAME_TYPES = '10,12,14,16,27,20,33,40,41,44,51'
+PWA_SEASON_TIME_RANGES = {
+    'S24': ('2026-06-05 16:00:00', '2026-09-04 15:59:59'),
+    'S23': ('2026-03-06 16:00:00', '2026-06-05 15:59:59'),
+    'S22': ('2025-11-14 16:00:00', '2026-03-06 15:59:59'),
+}
 PWA_USER_AGENT = (
     'Mozilla/5.0 (Windows NT 10.0; WOW64) AppleWebKit/537.36 '
     '(KHTML, like Gecko) perfectworldarena/1.0.26051411 '
@@ -364,6 +370,7 @@ def get_match_list_records(
             access_token,
             size=size,
             season=season,
+            season_record=None,
             acw_tc=acw_tc,
             et_decryptor=et_decryptor,
             et_decryptor_exe=et_decryptor_exe,
@@ -389,6 +396,7 @@ def get_match_list_records(
                 access_token,
                 size=size,
                 season=season_name,
+                season_record=season_record,
                 acw_tc=acw_tc,
                 et_decryptor=et_decryptor,
                 et_decryptor_exe=et_decryptor_exe,
@@ -449,6 +457,7 @@ def _get_user_match_list_records(
     access_token: str,
     size: int,
     season: str,
+    season_record: Mapping[str, object] | None,
     acw_tc: str | None,
     et_decryptor: PwaEtDecryptor | None,
     et_decryptor_exe: str | None,
@@ -461,7 +470,13 @@ def _get_user_match_list_records(
         'page': '1',
         'page_size': str(size),
         'season': season,
+        'game_types': PWA_USER_MATCH_LIST_GAME_TYPES,
+        'ticket_id': '',
     }
+    start_time, end_time = _pwa_user_match_list_time_range(season, season_record)
+    if start_time is not None and end_time is not None:
+        params['start_time'] = start_time
+        params['end_time'] = end_time
     headers = build_pwa_list_headers(steamid, access_token, acw_tc=acw_tc)
 
     try:
@@ -492,6 +507,18 @@ def _get_user_match_list_records(
         decryptor_timeout=et_decryptor_timeout,
     )
     return _coerce_pwa_match_list_records(decrypted)[:size]
+
+
+def _pwa_user_match_list_time_range(
+    season: str,
+    season_record: Mapping[str, object] | None,
+) -> tuple[str | None, str | None]:
+    if season_record is not None:
+        start_time = optional_str(season_record.get('start_time')) or optional_str(season_record.get('season_start_time'))
+        end_time = optional_str(season_record.get('end_time')) or optional_str(season_record.get('season_end_time'))
+        if start_time is not None and end_time is not None:
+            return start_time, end_time
+    return PWA_SEASON_TIME_RANGES.get(season, (None, None))
 
 
 def _coerce_pwa_match_list_records(payload: object) -> list[dict[str, object]]:

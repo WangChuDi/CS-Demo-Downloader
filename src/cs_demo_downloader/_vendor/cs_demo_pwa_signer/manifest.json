@@ -6,7 +6,7 @@
       "extension": "cs_demo_pwa_signer.cpython-310-darwin.so",
       "platform_tag": "macosx_10_12_x86_64",
       "python_tag": "cp310",
-      "sha256": "4d6922186eb129f1d1420f9222d3e2641159e856c0f2fcb35e5e2a2969fe7a94",
+      "sha256": "6dccbb23d68a7a6a849217b4fb5d17d8e7303177028f94fb94654479c62323b3",
       "wheel": "cs_demo_pwa_signer-0.1.0-cp310-cp310-macosx_10_12_x86_64.whl"
     },
     {
@@ -15,7 +15,7 @@
       "extension": "cs_demo_pwa_signer.cpython-310-darwin.so",
       "platform_tag": "macosx_11_0_arm64",
       "python_tag": "cp310",
-      "sha256": "73eda5543bb2ac78dafe160094e3c2094dc9c6bcd5c1fa17b09aebe151b1fec2",
+      "sha256": "f8e733f37f47476479c5ae15cdedc4e717fce49c240e6dfa26d92cb1fd1cc42d",
       "wheel": "cs_demo_pwa_signer-0.1.0-cp310-cp310-macosx_11_0_arm64.whl"
     },
     {
@@ -24,7 +24,7 @@
       "extension": "cs_demo_pwa_signer.cpython-310-aarch64-linux-gnu.so",
       "platform_tag": "manylinux_2_28_aarch64",
       "python_tag": "cp310",
-      "sha256": "1d5049a7e3fd92e35c7bd2a11f050539e3be9c000be4c644bf7b6ef048e55522",
+      "sha256": "dfd6c66cdbd08dd94a4f86f5aee519fb4776817d69ab11fc9a83cc5c6db94028",
       "wheel": "cs_demo_pwa_signer-0.1.0-cp310-cp310-manylinux_2_28_aarch64.whl"
     },
     {
@@ -33,7 +33,7 @@
       "extension": "cs_demo_pwa_signer.cpython-310-x86_64-linux-gnu.so",
       "platform_tag": "manylinux_2_28_x86_64",
       "python_tag": "cp310",
-      "sha256": "ec9a9fe2df28d9b36b339b679848d32362016d9221030f78274d174e1246cfb4",
+      "sha256": "cdd0c9f9a6f86badefe6305cf7b0e3d0c50b1e44f9758bb88d0f72ff8f447702",
       "wheel": "cs_demo_pwa_signer-0.1.0-cp310-cp310-manylinux_2_28_x86_64.whl"
     },
     {
@@ -42,7 +42,7 @@
       "extension": "cs_demo_pwa_signer.cp310-win_amd64.pyd",
       "platform_tag": "win_amd64",
       "python_tag": "cp310",
-      "sha256": "822242283ed7030d7ce641419ebffa7f594103d6358178bef48536958b56d7a8",
+      "sha256": "212629184fa167526faee445350be54d2cab9a01f10b436b285e61a3cba02b23",
       "wheel": "cs_demo_pwa_signer-0.1.0-cp310-cp310-win_amd64.whl"
     },
     {
@@ -51,7 +51,7 @@
       "extension": "cs_demo_pwa_signer.cpython-311-darwin.so",
       "platform_tag": "macosx_10_12_x86_64",
       "python_tag": "cp311",
-      "sha256": "9cff4504f876538eb3957ef9578eda19fd40cbe14871cf587991243771bbd07f",
+      "sha256": "1ef09632395a0890d0615b41776234a6459966feb3745c5cf825b30e356933d6",
       "wheel": "cs_demo_pwa_signer-0.1.0-cp311-cp311-macosx_10_12_x86_64.whl"
     },
     {
@@ -60,7 +60,7 @@
       "extension": "cs_demo_pwa_signer.cpython-311-darwin.so",
       "platform_tag": "macosx_11_0_arm64",
       "python_tag": "cp311",
-      "sha256": "9cc114a059b436d80c2a1856a8b6ea9a058e2947a420c7b2a8f05978b2c45420",
+      "sha256": "c90e2eb12d48d9912cca7a621827382f8481733a6403d301602666a786a4a507",
       "wheel": "cs_demo_pwa_signer-0.1.0-cp311-cp311-macosx_11_0_arm64.whl"
     },
     {
@@ -69,7 +69,7 @@
       "extension": "cs_demo_pwa_signer.cpython-311-aarch64-linux-gnu.so",
       "platform_tag": "manylinux_2_28_aarch64",
       "python_tag": "cp311",
-      "sha256": "cb9feeefa535c351090ec8414aa82b6a303c8e60bd9ae778eba81843f4197f69",
+      "sha256": "43df76450fd10b4d409cf11edadf7de22bbcf113c6798cffaede2ca5b470a73b",
       "wheel": "cs_demo_pwa_signer-0.1.0-cp311-cp311-manylinux_2_28_aarch64.whl"
     },
     {
@@ -78,7 +78,7 @@
       "extension": "cs_demo_pwa_signer.cpython-311-x86_64-linux-gnu.so",
       "platform_tag": "manylinux_2_28_x86_64",
       "python_tag": "cp311",
-      "sha256": "f324178883264fa3c8e7a82be9d068c298e4d8ff12fe5ef9f03fd8938728e704",
+      "sha256": "479ee2d81c8093431009250008875e780a1df5dacce76dca6d1d6c7344005727",
       "wheel": "cs_demo_pwa_signer-0.1.0-cp311-cp311-manylinux_2_28_x86_64.whl"
     },
     {
@@ -87,7 +87,7 @@
       "extension": "cs_demo_pwa_signer.cp311-win_amd64.pyd",
       "platform_tag": "win_amd64",
       "python_tag": "cp311",
-      "sha256": "b825578085843e08cf5c85c567c9f519ef6237359a695cf939ba07270f1f8347",
+      "sha256": "773307dd91198c862cdbe75ef92e2b834ccbbe61ea4c9e5006aace072b144da5",
       "wheel": "cs_demo_pwa_signer-0.1.0-cp311-cp311-win_amd64.whl"
     },
     {
@@ -96,7 +96,7 @@
       "extension": "cs_demo_pwa_signer.cpython-312-darwin.so",
       "platform_tag": "macosx_10_13_x86_64",
       "python_tag": "cp312",
-      "sha256": "49c4bad8b339f54d4d40ff1f08660e4628abd9c0267a99e98a5440c2d3771918",
+      "sha256": "afa02bdaa3be4f414ce172ba97ab8b65ecbf04bc86cf0e692407809e4453ae22",
       "wheel": "cs_demo_pwa_signer-0.1.0-cp312-cp312-macosx_10_13_x86_64.whl"
     },
     {
@@ -105,7 +105,7 @@
       "extension": "cs_demo_pwa_signer.cpython-312-darwin.so",
       "platform_tag": "macosx_11_0_arm64",
       "python_tag": "cp312",
-      "sha256": "68a3cfa2d9f16a39dec338608cce274a516cad5fd0a4cd27b0d2661590f43335",
+      "sha256": "1ea63abd74b743b735b52d17b2bda42575aa95ddf8e1bdc2471ef19ea8261f07",
       "wheel": "cs_demo_pwa_signer-0.1.0-cp312-cp312-macosx_11_0_arm64.whl"
     },
     {
@@ -114,7 +114,7 @@
       "extension": "cs_demo_pwa_signer.cpython-312-aarch64-linux-gnu.so",
       "platform_tag": "manylinux_2_28_aarch64",
       "python_tag": "cp312",
-      "sha256": "92eeccc4f1c08628b04c10d393fbc08e28c81d97cbd25aaba2131d253e91d2af",
+      "sha256": "490db20f3a54562e501b6095f7441a3f3859ab511ddbaffa556ba866e1c0d077",
       "wheel": "cs_demo_pwa_signer-0.1.0-cp312-cp312-manylinux_2_28_aarch64.whl"
     },
     {
@@ -123,7 +123,7 @@
       "extension": "cs_demo_pwa_signer.cpython-312-x86_64-linux-gnu.so",
       "platform_tag": "manylinux_2_28_x86_64",
       "python_tag": "cp312",
-      "sha256": "1b658979beb56f2c7504ad7948e5fe515ac2b765755ddd20d29547870e499469",
+      "sha256": "abbbe8c0446c01d785eddc5a9db8f9928eee0f6be82ccea7b01af5e3ea89f29c",
       "wheel": "cs_demo_pwa_signer-0.1.0-cp312-cp312-manylinux_2_28_x86_64.whl"
     },
     {
@@ -132,7 +132,7 @@
       "extension": "cs_demo_pwa_signer.cp312-win_amd64.pyd",
       "platform_tag": "win_amd64",
       "python_tag": "cp312",
-      "sha256": "87054bea0d2cb891d799c61c42d18aae4dd0c3bb23423d9bd7f1d7fb86e608b2",
+      "sha256": "da68e49011657af1ec1e68f4cf1d2fdced4efa97b1a9ecca77f316265c22a468",
       "wheel": "cs_demo_pwa_signer-0.1.0-cp312-cp312-win_amd64.whl"
     },
     {
@@ -141,7 +141,7 @@
       "extension": "cs_demo_pwa_signer.cpython-39-darwin.so",
       "platform_tag": "macosx_10_12_x86_64",
       "python_tag": "cp39",
-      "sha256": "bab50e4fb54d71247e0feecc9c422ef8f9ab77de58c6ae3608860983a404606d",
+      "sha256": "60a09e705081a1cac01e802d69947a321d89c737462ed1bf4b74fb2e4024ac52",
       "wheel": "cs_demo_pwa_signer-0.1.0-cp39-cp39-macosx_10_12_x86_64.whl"
     },
     {
@@ -150,7 +150,7 @@
       "extension": "cs_demo_pwa_signer.cpython-39-darwin.so",
       "platform_tag": "macosx_11_0_arm64",
       "python_tag": "cp39",
-      "sha256": "5933ae937ffbe3ea1cba91ee6b7613729f3b119f0c9d1fe2aaf16b7b894e4ce4",
+      "sha256": "d0c38c49a53a1a0d4b9f5e2c5b5dea3f56143df2aa0cce56a027d2097424bc72",
       "wheel": "cs_demo_pwa_signer-0.1.0-cp39-cp39-macosx_11_0_arm64.whl"
     },
     {
@@ -159,7 +159,7 @@
       "extension": "cs_demo_pwa_signer.cpython-39-aarch64-linux-gnu.so",
       "platform_tag": "manylinux_2_28_aarch64",
       "python_tag": "cp39",
-      "sha256": "b67816abe05370163da7eaac8c2dbccc3ff275203f8399bfdd336cc27adf8a78",
+      "sha256": "4749246ab06722b183762693a715607ae79256e085cca92c3338e747347ed649",
       "wheel": "cs_demo_pwa_signer-0.1.0-cp39-cp39-manylinux_2_28_aarch64.whl"
     },
     {
@@ -168,7 +168,7 @@
       "extension": "cs_demo_pwa_signer.cpython-39-x86_64-linux-gnu.so",
       "platform_tag": "manylinux_2_28_x86_64",
       "python_tag": "cp39",
-      "sha256": "890c0e2cdc17fc4319c886a80b66ae340786874345f4771dbe6439d17f8e05c3",
+      "sha256": "7e51c67b8b59131335e5c4f557330f4284ecf1ec58af63a115e967373ef1f0bc",
       "wheel": "cs_demo_pwa_signer-0.1.0-cp39-cp39-manylinux_2_28_x86_64.whl"
     },
     {
@@ -177,7 +177,7 @@
       "extension": "cs_demo_pwa_signer.cp39-win_amd64.pyd",
       "platform_tag": "win_amd64",
       "python_tag": "cp39",
-      "sha256": "07e9a452b8e8815952dc1536e642bc4ad62f4018c2305390cbadc334f99d1fbe",
+      "sha256": "2c68ed3cd754e26a70f9c481fe0b5cc30483a7f13b0ed273ac819aa2dcc22bf9",
       "wheel": "cs_demo_pwa_signer-0.1.0-cp39-cp39-win_amd64.whl"
     }
   ],

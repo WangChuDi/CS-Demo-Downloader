@@ -292,6 +292,7 @@ Common commands:
 | Download 5EPlay only | `cs-demo-downloader download --platform 5e --config config.jsonc` |
 | Download PWA only | `cs-demo-downloader download --platform pwa --config config.jsonc` |
 | Download Steam only | `cs-demo-downloader download --platform steam --config config.jsonc` |
+| Export 5E/PWA metadata | `cs-demo-downloader metadata --all --config config.jsonc --pretty` |
 | Start internal scheduler | `cs-demo-downloader schedule --config config.jsonc` |
 | Refresh cached PWA DLL manually | `cs-demo-downloader update-pvpalive-dll --target cache/PvpAlive.dll` |
 
@@ -329,6 +330,23 @@ Download only Steam official matchmaking demos:
 ```bash
 cs-demo-downloader download --platform steam --config config.jsonc
 ```
+
+Export normalized metadata for configured 5E/PWA users without downloading demo files:
+
+```bash
+cs-demo-downloader metadata --all --config config.jsonc --pretty
+cs-demo-downloader metadata --platform pwa --config config.jsonc --limit 5 --include-raw
+```
+
+The metadata command prints a JSON list. URL query secrets such as PWA `access_token` and signatures are redacted by default, including when `--include-raw` is used.
+
+Each match keeps the original backward-compatible fields such as `platform`, `match_id`, `demo_url`, `demo_available`, `teams`, `players`, `round_results`, `raw_summary`, and `raw_detail`. Newer exports also include:
+
+- `schema_version`: metadata shape version, currently `1.1`.
+- `exported_at`: UTC export timestamp added at serialization time.
+- `duration_seconds`: derived from `started_at` and `ended_at` when both timestamps are valid.
+- `demo`: grouped demo state with redacted `url`, `available`, source/details, and platform demo flags when available.
+- `rounds`: normalized round list. For PWA this merges `report.results` and `round_simple_list` by round number while preserving `round_results` for older consumers.
 
 Update the cached PWA `PvpAlive.dll` explicitly without downloading the full official client ZIP:
 
@@ -405,6 +423,27 @@ from cs_demo_downloader.core.downloader_pwa import get_demo_url
 
 demo_url = get_demo_url("MATCH_ID", "YOUR_PWA_ACCESS_TOKEN")
 ```
+
+### Metadata export from Python
+
+After installing the pip package, you can collect normalized metadata directly. Use `metadata_list_to_dicts()` before writing JSON so schema fields, export timestamps, URL redaction, and optional raw-field removal are handled consistently with the CLI.
+
+```python
+import json
+
+from cs_demo_downloader.core.downloader_5e import get_all_demo_metadata as get_5e_metadata
+from cs_demo_downloader.core.downloader_pwa import get_all_demo_metadata as get_pwa_metadata
+from cs_demo_downloader.core.metadata import metadata_list_to_dicts
+
+matches = []
+matches.extend(get_5e_metadata("YOUR_5E_USERID", limit=10))
+matches.extend(get_pwa_metadata("YOUR_STEAM_ID64", "YOUR_PWA_ACCESS_TOKEN", size=10))
+
+payload = metadata_list_to_dicts(matches, redact_sensitive_urls=True, include_raw=False)
+print(json.dumps(payload, ensure_ascii=False, indent=2))
+```
+
+For real PWA metadata, the private `cs-demo-pwa-signer` wheel must be installed because match-list fallback responses and demo URLs require the compiled signing/decryption boundary. 5E metadata does not require that wheel.
 
 ### Steam Official Matchmaking
 

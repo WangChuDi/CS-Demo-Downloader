@@ -259,6 +259,23 @@ cs-demo-downloader download --platform pwa --config config.jsonc
 cs-demo-downloader download --platform steam --config config.jsonc
 ```
 
+只导出 5E/PWA metadata，不下载 demo 文件：
+
+```bash
+cs-demo-downloader metadata --all --config config.jsonc --pretty
+cs-demo-downloader metadata --platform pwa --config config.jsonc --limit 5 --include-raw
+```
+
+`metadata` 命令会输出 JSON 列表。默认会脱敏 URL query 中的 PWA `access_token` 和签名参数；即使使用 `--include-raw`，原始字段里的 URL 也会继续脱敏。
+
+每条比赛仍保留旧字段，例如 `platform`、`match_id`、`demo_url`、`demo_available`、`teams`、`players`、`round_results`、`raw_summary` 和 `raw_detail`，方便旧脚本继续读取。新版导出额外包含：
+
+- `schema_version`：metadata 结构版本，当前为 `1.1`。
+- `exported_at`：序列化导出时写入的 UTC 时间。
+- `duration_seconds`：当 `started_at` 和 `ended_at` 有效时自动计算的比赛时长。
+- `demo`：归组后的 demo 信息，包括脱敏后的 `url`、`available`、来源和平台 demo 状态字段。
+- `rounds`：更完整的回合列表。PWA 会按回合号合并 `report.results` 和 `round_simple_list`，同时保留旧的 `round_results` 给已有消费者使用。
+
 显式更新缓存的 PWA `PvpAlive.dll`，不会下载完整官方客户端 ZIP：
 
 ```bash
@@ -329,6 +346,27 @@ from cs_demo_downloader.core.downloader_pwa import get_demo_url
 
 demo_url = get_demo_url("MATCH_ID", "YOUR_PWA_ACCESS_TOKEN")
 ```
+
+### 在 Python 中导出 metadata
+
+从 pip 包安装后，也可以直接在 Python 中抓取规范化 metadata。写 JSON 前建议调用 `metadata_list_to_dicts()`，这样会和 CLI 一样处理 schema 字段、导出时间、URL 脱敏以及是否包含 raw 字段。
+
+```python
+import json
+
+from cs_demo_downloader.core.downloader_5e import get_all_demo_metadata as get_5e_metadata
+from cs_demo_downloader.core.downloader_pwa import get_all_demo_metadata as get_pwa_metadata
+from cs_demo_downloader.core.metadata import metadata_list_to_dicts
+
+matches = []
+matches.extend(get_5e_metadata("YOUR_5E_USERID", limit=10))
+matches.extend(get_pwa_metadata("YOUR_STEAM_ID64", "YOUR_PWA_ACCESS_TOKEN", size=10))
+
+payload = metadata_list_to_dicts(matches, redact_sensitive_urls=True, include_raw=False)
+print(json.dumps(payload, ensure_ascii=False, indent=2))
+```
+
+真实 PWA metadata 需要安装私有 `cs-demo-pwa-signer` wheel，因为 PWA match-list fallback 解密和 demo URL 签名依赖这个编译边界。5E metadata 不需要该 wheel。
 
 ### Steam 官匹
 

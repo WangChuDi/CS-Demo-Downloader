@@ -16,15 +16,21 @@ from typing import Callable
 
 from .core.config import Config, ConfigLoadError, load_config
 from .core.downloader_5e import get_all_demo_urls as get_5e_demos
+from .core.downloader_5e import get_all_demo_metadata as get_5e_metadata
 from .core.downloader_pwa import build_download_headers as build_pwa_download_headers
+from .core.downloader_pwa import call_pwa_et_decryptor_exe
 from .core.downloader_pwa import get_all_demo_urls as get_pwa_demos
+from .core.downloader_pwa import get_all_demo_metadata as get_pwa_metadata
 from .core.downloader_steam import get_all_demo_urls as get_steam_demos
+from .core.metadata import MatchMetadata, metadata_list_to_dicts
 from .core.utils import download_and_extract, redact_url
 from .pwa_dll_updater import LATEST_YML_URL, PvpAliveUpdateError, update_cached_pvp_alive_dll
 
 
 PwaDemoSigner = Callable[[str, str, str], str]
+PwaEtDecryptor = Callable[[str, str], str]
 VALID_PLATFORMS = ('5e', 'pwa', 'steam')
+METADATA_PLATFORMS = ('5e', 'pwa')
 SCHEDULE_PLATFORM_VALUES = ('all', *VALID_PLATFORMS)
 TRUE_VALUES = {'1', 'true', 'yes', 'on'}
 FALSE_VALUES = {'0', 'false', 'no', 'off', ''}
@@ -91,7 +97,8 @@ def download_pwa_demos(config: Config):
         except RuntimeError as e:
             print(f"Unable to configure PWA signer for {user.label}: {e}", file=sys.stderr)
             continue
-        demo_urls = get_pwa_demos(user.steamid, user.access_token, signer=signer)
+        decryptor = build_pwa_et_decryptor(config)
+        demo_urls = get_pwa_demos(user.steamid, user.access_token, signer=signer, et_decryptor=decryptor)
 
         if not demo_urls:
             print(f"No demos found for {user.label}")
@@ -161,6 +168,24 @@ def build_pwa_demo_url_signer(config: Config) -> PwaDemoSigner | None:
         "Use 'compiled', 'pvp_alive_native', or 'pvp_alive_wine'."
     )
     raise RuntimeError(message)
+
+
+def build_pwa_et_decryptor(config: Config) -> PwaEtDecryptor | None:
+    pwa_config = config.pwa or {}
+    executable_path = pwa_config.get('et_decryptor_exe') or pwa_config.get('pwa_response_decryptor_exe') or ''
+    if not executable_path.strip():
+        return None
+    timeout = int(pwa_config.get('et_decryptor_timeout', pwa_config.get('pwa_response_decryptor_timeout', '10')))
+
+    def decryptor(encrypted: str, token: str) -> str:
+        return call_pwa_et_decryptor_exe(
+            encrypted=encrypted,
+            token=token,
+            executable_path=executable_path,
+            timeout=timeout,
+        )
+
+    return decryptor
 
 
 def build_steam_demo_url_resolver(config: Config):
@@ -272,6 +297,87 @@ def run_download_command(
 
     platforms = None if all_platforms or platform is None else [platform]
     return run_download(config, output_path=output_path, platforms=platforms)
+
+
+def collect_5e_metadata(config: Config, limit: int) -> list[MatchMetadata]:
+    users = config.get_users_5e()
+    if not users:
+        return []
+
+    matches: list[MatchMetadata] = []
+    for user in users:
+        matches.extend(get_5e_metadata(user.userid, limit=limit))
+    return matches
+
+
+def collect_pwa_metadata(config: Config, limit: int) -> list[MatchMetadata]:
+    users = config.get_users_pwa()
+    if not users:
+        return []
+
+    matches: list[MatchMetadata] = []
+    for user in users:
+        try:
+            signer = build_pwa_demo_url_signer(config)
+        except RuntimeError as e:
+            print(f"Unable to configure PWA signer for {user.label}: {e}", file=sys.stderr)
+            continue
+        decryptor = build_pwa_et_decryptor(config)
+        matches.extend(get_pwa_metadata(user.steamid, user.access_token, size=limit, signer=signer, et_decryptor=decryptor))
+    return matches
+
+
+def run_metadata(
+    config: Config,
+    platform: str | None = None,
+    all_platforms: bool = False,
+    limit: int = 20,
+    pretty: bool = False,
+    include_raw: bool = False,
+    redact_sensitive_urls: bool = True,
+) -> int:
+    selected_platforms = list(METADATA_PLATFORMS) if all_platforms or platform is None else [platform]
+    matches: list[MatchMetadata] = []
+
+    for selected_platform in selected_platforms:
+        if selected_platform == '5e':
+            matches.extend(collect_5e_metadata(config, limit=limit))
+        elif selected_platform == 'pwa':
+            matches.extend(collect_pwa_metadata(config, limit=limit))
+
+    payload = metadata_list_to_dicts(
+        matches,
+        redact_sensitive_urls=redact_sensitive_urls,
+        include_raw=include_raw,
+    )
+    indent = 2 if pretty else None
+    print(json.dumps(payload, ensure_ascii=False, indent=indent))
+    return 0
+
+
+def run_metadata_command(
+    config_path: str | None,
+    platform: str | None,
+    all_platforms: bool,
+    limit: int,
+    pretty: bool,
+    include_raw: bool,
+) -> int:
+    try:
+        config = load_config(config_path)
+    except ConfigLoadError as e:
+        print(e, file=sys.stderr)
+        return 1
+
+    return run_metadata(
+        config,
+        platform=platform,
+        all_platforms=all_platforms,
+        limit=limit,
+        pretty=pretty,
+        include_raw=include_raw,
+        redact_sensitive_urls=True,
+    )
 
 
 def _parse_bool(value: object, field_name: str) -> bool:
@@ -633,6 +739,32 @@ def main(argv: list[str] | None = None):
         help='启动调度器后立即运行一次；也可使用 CS_DEMO_SCHEDULE_RUN_ON_START=true'
     )
 
+    metadata_parser = subparsers.add_parser('metadata', help='抓取并输出 Demo metadata')
+    metadata_parser.add_argument(
+        '--all', action='store_true',
+        help='抓取所有支持 metadata 的平台'
+    )
+    metadata_parser.add_argument(
+        '--platform', choices=list(METADATA_PLATFORMS),
+        help='只抓取指定平台的 Demo metadata'
+    )
+    metadata_parser.add_argument(
+        '--config', type=str,
+        help='配置文件路径'
+    )
+    metadata_parser.add_argument(
+        '--limit', type=int, default=20,
+        help='每个用户最多抓取的比赛数量'
+    )
+    metadata_parser.add_argument(
+        '--pretty', action='store_true',
+        help='格式化 JSON 输出'
+    )
+    metadata_parser.add_argument(
+        '--include-raw', action='store_true',
+        help='在 JSON 输出中包含平台原始字段；URL 仍会脱敏'
+    )
+
     pvp_alive_parser = subparsers.add_parser(
         'update-pvpalive-dll',
         help='通过 HTTP Range 从官方客户端 ZIP 提取并缓存 PvpAlive.dll'
@@ -671,6 +803,15 @@ def main(argv: list[str] | None = None):
             enabled=args.enabled,
             interval_seconds=args.interval_seconds,
             run_on_start=args.run_on_start,
+        )
+    if args.command == 'metadata':
+        return run_metadata_command(
+            args.config,
+            args.platform,
+            args.all,
+            args.limit,
+            args.pretty,
+            args.include_raw,
         )
     if args.command == 'update-pvpalive-dll':
         try:

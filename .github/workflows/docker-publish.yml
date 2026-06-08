@@ -57,7 +57,7 @@ jobs:
           CIBW_BUILD: "cp312-*"
           CIBW_SKIP: "*-musllinux_*"
           CIBW_ARCHS_LINUX: "x86_64 aarch64"
-          CIBW_TEST_COMMAND: "python -c \"import cs_demo_pwa_signer; assert hasattr(cs_demo_pwa_signer, 'sign_demo_request'); assert hasattr(cs_demo_pwa_signer, 'build_x_pwa_signature')\""
+          CIBW_TEST_COMMAND: "python -c \"import cs_demo_pwa_signer; assert hasattr(cs_demo_pwa_signer, 'sign_demo_request'); assert hasattr(cs_demo_pwa_signer, 'build_x_pwa_signature'); assert hasattr(cs_demo_pwa_signer, 'decrypt_pwa_response')\""
           CIBW_BEFORE_ALL_LINUX: "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --profile minimal"
           CIBW_ENVIRONMENT_LINUX: "PATH=$PATH:$HOME/.cargo/bin"
         run: |

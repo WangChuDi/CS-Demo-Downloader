@@ -40,6 +40,11 @@
     "pvp_alive_bridge_exe": "",
     "pvp_alive_wine_executable": "wine",
     "pvp_alive_timeout": "10",
+    // Optional private executable for decrypting encrypted user-info/match-list responses.
+    // The executable is built from the private signer repository and receives stdin JSON
+    // with e/t fields, then prints decrypted JSON to stdout.
+    "pwa_response_decryptor_exe": "",
+    "pwa_response_decryptor_timeout": "10",
     "users": [
       {
         "label": "pwa_target_1",

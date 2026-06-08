@@ -9,11 +9,31 @@ The wheel must install an importable module named `cs_demo_pwa_signer` with thes
 ```python
 def sign_demo_request(randnum: str, timestamp: str, data: str) -> str: ...
 def build_x_pwa_signature(steamid: str, timestamp: int, ip_addr: str) -> str: ...
+def decrypt_pwa_response(encrypted: str, token: str) -> str: ...
 ```
+
+Historical PWA match-list responses may return encrypted `data.e` and `data.t`
+fields. Keep that response decryption implementation in the private signer
+repository as well. The public downloader calls
+`cs_demo_pwa_signer.decrypt_pwa_response(data.e, data.t)` by default. Public
+tests use an injected Python callable and do not require the private wheel.
+
+An optional private executable configured as `pwa.pwa_response_decryptor_exe`
+is kept only as a compatibility fallback for local debugging or emergency
+deployment. Normal releases should use the wheel API.
+
+The private executable contract is intentionally narrow:
+
+- Read stdin JSON containing string fields `e` and `t`.
+- Write the decrypted JSON text to stdout.
+- Exit non-zero and write a diagnostic to stderr when decryption fails.
+- Do not print tokens, decrypted payloads, or private algorithm details in error
+  messages.
 
 ## Build and release rules
 
 - Keep the signer source in a private repository or another private location outside this repository.
+- Keep the encrypted response decryption source in that same private location.
 - Publish wheels only. Do not publish an sdist.
 - Inspect every wheel before release. It may contain compiled artifacts such as `.so`, `.pyd`, or `.dylib` and normal `.dist-info` metadata only.
 - The wheel must not contain `.py`, `.pyx`, `.c`, `.cpp`, `.h`, `.rs`, or generated Cython/Nuitka source files that reveal the algorithm.
@@ -47,7 +67,7 @@ The workflow builds:
 - macOS Intel and Apple Silicon wheels.
 - CPython 3.9, 3.10, 3.11, and 3.12 wheels.
 
-Every built wheel is smoke-tested by importing `cs_demo_pwa_signer` and checking that both required functions exist. Then `scripts/verify_private_signer_wheel.py` rejects any wheel containing source-like files. Passing wheels are uploaded as GitHub Actions artifacts named `cs-demo-pwa-signer-wheels-*`.
+Every built wheel is smoke-tested by importing `cs_demo_pwa_signer` and checking that all required functions exist. Then `scripts/verify_private_signer_wheel.py` rejects any wheel containing source-like files. Passing wheels are uploaded as GitHub Actions artifacts named `cs-demo-pwa-signer-wheels-*`.
 
 `docker-publish.yml` also builds Linux signer wheels before Docker image builds. For automatic tag/release Docker builds, tag the private signer repository with the same tag as this public repository, or run the Docker workflow manually and set `signer_ref` to the desired private signer ref.
 

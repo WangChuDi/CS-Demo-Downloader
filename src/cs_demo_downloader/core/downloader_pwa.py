@@ -849,6 +849,7 @@ def build_match_metadata(
         match_id=match_id,
         demo_url=normalized_demo_url,
         demo_available=demo_available,
+        demo=_pwa_demo_payload(normalized_demo_url, demo_available, demo_info),
         map_name=optional_str(report.get('map')) or optional_str(summary.get('map')),
         map_label=optional_str(report.get('map')) or optional_str(summary.get('map_name')),
         location=optional_str(report.get('location')) or optional_str(report.get('server_location')) or optional_str(summary.get('location')),
@@ -864,6 +865,7 @@ def build_match_metadata(
         match_awards=_pwa_match_awards(report),
         demo_info=_pwa_demo_info(demo_info),
         round_results=_pwa_round_results(report),
+        rounds=_pwa_rounds(report_root, report),
         platform_match=_pwa_platform_match(report_root, report),
         raw_summary=json_object(dict(summary)),
         raw_detail=json_object(dict(report_root)),
@@ -932,6 +934,20 @@ def _pwa_demo_info(demo_info: Mapping[str, object]) -> dict[str, JSONValue]:
     })
 
 
+def _pwa_demo_payload(
+    demo_url: str | None,
+    demo_available: bool | None,
+    demo_info: Mapping[str, object],
+) -> dict[str, JSONValue]:
+    payload: dict[str, JSONValue] = {
+        'url': demo_url,
+        'available': demo_available,
+        'source': 'match_report' if optional_str(demo_info.get('demo_url')) is not None else 'signed_url',
+    }
+    payload.update(_pwa_demo_info(demo_info))
+    return payload
+
+
 def _pwa_round_results(report: Mapping[str, object]) -> list[dict[str, JSONValue]]:
     results_value = report.get('results')
     if not isinstance(results_value, list):
@@ -956,6 +972,76 @@ def _pwa_round_results(report: Mapping[str, object]) -> list[dict[str, JSONValue
                     item[normalized_key] = value
             results.append(item)
     return results
+
+
+def _pwa_rounds(report_root: Mapping[str, object], report: Mapping[str, object]) -> list[dict[str, JSONValue]]:
+    by_round: dict[str, dict[str, JSONValue]] = {}
+    order: list[str] = []
+
+    for item in _pwa_round_results(report):
+        _merge_pwa_round(by_round, order, item)
+
+    round_simple_list = report_root.get('round_simple_list')
+    if isinstance(round_simple_list, list):
+        for row in round_simple_list:
+            if not isinstance(row, Mapping):
+                continue
+            item = _pwa_round_simple_item(row)
+            _merge_pwa_round(by_round, order, item)
+
+    return [by_round[key] for key in _sorted_pwa_round_keys(order)]
+
+
+def _merge_pwa_round(
+    by_round: dict[str, dict[str, JSONValue]],
+    order: list[str],
+    item: Mapping[str, JSONValue],
+):
+    round_key = _pwa_round_key(item.get('round'))
+    if round_key is None:
+        round_key = f'unknown-{len(order) + 1}'
+    if round_key not in by_round:
+        by_round[round_key] = {}
+        order.append(round_key)
+    by_round[round_key].update(dict(item))
+    round_number = optional_int(round_key)
+    if round_number is not None:
+        by_round[round_key]['round'] = round_number
+
+
+def _pwa_round_simple_item(row: Mapping[str, object]) -> dict[str, JSONValue]:
+    item: dict[str, JSONValue] = {}
+    for key, value in row.items():
+        normalized_key = str(key)
+        normalized_value = to_json_value(value)
+        if isinstance(normalized_value, str) and normalized_value.strip().startswith(('{', '[')):
+            try:
+                decoded = json.loads(normalized_value)
+            except json.JSONDecodeError:
+                pass
+            else:
+                normalized_value = to_json_value(decoded)
+        elif isinstance(normalized_value, str):
+            normalized_value = _pwa_normalized_scalar(normalized_value)
+        item[normalized_key] = normalized_value
+    return item
+
+
+def _pwa_round_key(value: object) -> str | None:
+    round_number = optional_int(value)
+    if round_number is not None:
+        return str(round_number)
+    return optional_str(value)
+
+
+def _sorted_pwa_round_keys(keys: list[str]) -> list[str]:
+    def sort_key(value: str) -> tuple[int, int, str]:
+        number = optional_int(value)
+        if number is not None:
+            return (0, number, value)
+        return (1, keys.index(value), value)
+
+    return sorted(keys, key=sort_key)
 
 
 def _pwa_platform_match(report_root: Mapping[str, object], report: Mapping[str, object]) -> dict[str, JSONValue]:

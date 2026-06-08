@@ -12,10 +12,60 @@ from cs_demo_downloader.core.downloader_pwa import (
     build_match_metadata as build_pwa_match_metadata,
     get_all_demo_metadata as get_pwa_demo_metadata,
 )
-from cs_demo_downloader.core.metadata import MatchMetadata, metadata_list_to_dicts
+from cs_demo_downloader.core.metadata import MatchMetadata, MatchPlayer, MatchTeam, metadata_list_to_dicts
 
 
 class MetadataModelTests(unittest.TestCase):
+    def test_match_metadata_preserves_legacy_positional_constructor_order(self):
+        match = MatchMetadata('5e', 'match-1', 'https://example.invalid/demo.dem', True)
+
+        self.assertEqual('5e', match.platform)
+        self.assertEqual('match-1', match.match_id)
+        self.assertEqual('https://example.invalid/demo.dem', match.demo_url)
+        self.assertEqual(True, match.demo_available)
+        self.assertEqual('1.1', match.schema_version)
+        self.assertIsNone(match.exported_at)
+
+    def test_match_metadata_preserves_full_legacy_positional_constructor_order(self):
+        teams = [MatchTeam(name='group_1')]
+        players = [MatchPlayer(player_id='player-1')]
+        match = MatchMetadata(
+            '5e',
+            'match-1',
+            'https://example.invalid/demo.dem',
+            True,
+            'de_inferno',
+            '炼狱小镇',
+            'Shanghai',
+            '1',
+            42,
+            'ladder',
+            2026,
+            24,
+            100,
+            160,
+            teams,
+            players,
+            {'mvp_player_id': 'player-1'},
+            {'demo_id': 'demo-1'},
+            [{'round': 1}],
+            {'game_mode': 'ladder'},
+            {'summary': True},
+            {'detail': True},
+        )
+
+        self.assertIs(match.teams, teams)
+        self.assertIs(match.players, players)
+        self.assertEqual({'mvp_player_id': 'player-1'}, match.match_awards)
+        self.assertEqual({'demo_id': 'demo-1'}, match.demo_info)
+        self.assertEqual([{'round': 1}], match.round_results)
+        self.assertEqual({'game_mode': 'ladder'}, match.platform_match)
+        self.assertEqual({'summary': True}, match.raw_summary)
+        self.assertEqual({'detail': True}, match.raw_detail)
+        self.assertEqual(60, match.duration_seconds)
+        self.assertEqual('1.1', match.schema_version)
+        self.assertEqual([], match.rounds)
+
     def test_metadata_serialization_redacts_sensitive_urls_in_raw_fields(self):
         match = MatchMetadata(
             platform='pwa',
@@ -42,6 +92,34 @@ class MetadataModelTests(unittest.TestCase):
 
         self.assertNotIn('raw_summary', payload[0])
         self.assertNotIn('raw_detail', payload[0])
+
+    def test_metadata_serialization_adds_schema_export_time_duration_and_demo_group(self):
+        match = MatchMetadata(
+            platform='5e',
+            match_id='match-1',
+            demo_url='https://example.invalid/demo.dem?access_token=secret',
+            demo_available=True,
+            started_at=100,
+            ended_at=160,
+        )
+
+        payload = metadata_list_to_dicts([match], redact_sensitive_urls=True, include_raw=False)
+
+        item = payload[0]
+        self.assertEqual('1.1', item['schema_version'])
+        self.assertIsInstance(item['exported_at'], str)
+        self.assertEqual(60, item['duration_seconds'])
+        demo = item['demo']
+        self.assertIsInstance(demo, dict)
+        if not isinstance(demo, dict):
+            self.fail('expected demo payload')
+        self.assertEqual(True, demo['available'])
+        demo_url = demo['url']
+        self.assertIsInstance(demo_url, str)
+        if not isinstance(demo_url, str):
+            self.fail('expected demo url')
+        self.assertIn('access_token=%3Credacted%3E', demo_url)
+        self.assertEqual(item['demo_url'], demo['url'])
 
 
 class FiveEMetadataTests(unittest.TestCase):
@@ -179,6 +257,9 @@ class FiveEMetadataTests(unittest.TestCase):
         self.assertEqual('ladder', match.season_type)
         self.assertEqual(2026, match.year)
         self.assertEqual(24, match.round_total)
+        self.assertEqual(3000, match.duration_seconds)
+        self.assertEqual('match_detail', match.demo['source'])
+        self.assertEqual(True, match.demo['available'])
         self.assertEqual(13, match.teams[0].score)
         self.assertEqual('team-1', match.teams[0].team_id)
         self.assertEqual(['player-1', 'player-3'], match.teams[0].player_ids)
@@ -362,7 +443,10 @@ class PwaMetadataTests(unittest.TestCase):
         self.assertEqual('ladder', match.season_type)
         self.assertEqual(2026, match.year)
         self.assertEqual(23, match.round_total)
+        self.assertEqual(3600, match.duration_seconds)
         self.assertTrue(match.demo_available)
+        self.assertEqual('match_report', match.demo['source'])
+        self.assertEqual('demo-1', match.demo['demo_id'])
         self.assertEqual('demo-1', match.demo_info['demo_id'])
         self.assertEqual(False, match.demo_info['expire_soon'])
         self.assertEqual('ladder', match.platform_match['game_mode'])
@@ -370,6 +454,10 @@ class PwaMetadataTests(unittest.TestCase):
         self.assertEqual('2', match.platform_match['win_team_id'])
         self.assertEqual(1, match.round_results[0]['round'])
         self.assertEqual('bomb', match.round_results[0]['win_type'])
+        self.assertEqual(1, len(match.rounds))
+        self.assertEqual(1, match.rounds[0]['round'])
+        self.assertEqual('bomb', match.rounds[0]['win_type'])
+        self.assertEqual({'1': 1}, match.rounds[0]['kill'])
         self.assertEqual(13, match.teams[0].score)
         self.assertEqual('2', match.teams[0].team_id)
         self.assertEqual(['user-1'], match.teams[0].player_ids)
@@ -407,6 +495,38 @@ class PwaMetadataTests(unittest.TestCase):
         self.assertEqual(18, match.players[1].kills)
         self.assertIn('perfect_moment', match.raw_detail)
         self.assertIn('round_simple_list', match.raw_detail)
+
+    def test_pwa_rounds_merge_results_and_round_simple_list_by_round_number(self):
+        report = {
+            'report': {
+                'match_id': 'match-1',
+                'results': [
+                    {'round': '2', 'win_type': 'elimination', 'win_camp': 'CT'},
+                    {'round': '1', 'win_type': 'bomb', 'win_camp': 'T'},
+                ],
+            },
+            'round_simple_list': [
+                {'round': '1', 'kill': '{"user-1":2}', 'damage': '100'},
+                {'round': '3', 'kill': '{"user-2":1}'},
+            ],
+        }
+
+        match = build_pwa_match_metadata({'match': 'match-1'}, 'https://fallback.invalid/demo.dem', report)
+
+        self.assertIsNotNone(match)
+        if match is None:
+            self.fail('expected metadata')
+        self.assertEqual([1, 2, 3], [round_item['round'] for round_item in match.rounds])
+        self.assertEqual('bomb', match.rounds[0]['win_type'])
+        self.assertEqual({'user-1': 2}, match.rounds[0]['kill'])
+        self.assertEqual(100, match.rounds[0]['damage'])
+        self.assertEqual('elimination', match.rounds[1]['win_type'])
+        self.assertEqual({'user-2': 1}, match.rounds[2]['kill'])
+
+    def test_duration_seconds_ignores_inverted_timestamps(self):
+        match = MatchMetadata(platform='pwa', match_id='match-1', started_at=200, ended_at=100)
+
+        self.assertIsNone(match.duration_seconds)
 
     def test_get_all_demo_metadata_falls_back_without_report_fetcher(self):
         with mock.patch('cs_demo_downloader.core.downloader_pwa.get_match_list_records', return_value=[{'match': 'match-1'}]):

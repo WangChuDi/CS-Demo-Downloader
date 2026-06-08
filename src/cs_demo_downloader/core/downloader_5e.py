@@ -270,11 +270,18 @@ def build_match_metadata(summary: Mapping[str, object], detail: Mapping[str, obj
         ),
     ]
 
+    demo_url = optional_str(main.get('demo_url'))
+
     return MatchMetadata(
         platform='5e',
         match_id=match_id,
-        demo_url=optional_str(main.get('demo_url')),
-        demo_available=optional_str(main.get('demo_url')) is not None,
+        demo_url=demo_url,
+        demo_available=demo_url is not None,
+        demo={
+            'url': demo_url,
+            'available': demo_url is not None,
+            'source': 'match_detail',
+        },
         map_name=optional_str(main.get('map')) or optional_str(summary.get('map')),
         map_label=optional_str(main.get('map_desc')) or optional_str(summary.get('map_name')),
         location=optional_str(main.get('location_full')) or optional_str(main.get('location')),

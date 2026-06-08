@@ -582,6 +582,12 @@ class PwaDownloaderTests(unittest.TestCase):
         self.assertEqual([{'match_id': 'match-s23', 'match': 'match-s23', 'season': 'S23'}], records)
         requested_seasons = [call.kwargs['params'].get('season') for call in get.call_args_list if 'params' in call.kwargs]
         self.assertIn('S23', requested_seasons)
+        encrypted_params = get.call_args_list[-1].kwargs['params']
+        self.assertEqual('10', encrypted_params['page_size'])
+        self.assertEqual('10,12,14,16,27,20,33,40,41,44,51', encrypted_params['game_types'])
+        self.assertEqual('2026-03-06 16:00:00', encrypted_params['start_time'])
+        self.assertEqual('2026-06-05 15:59:59', encrypted_params['end_time'])
+        self.assertEqual('', encrypted_params['ticket_id'])
 
     def test_get_match_list_records_returns_empty_without_decryptor_for_encrypted_match_list(self):
         recent_response = mock.MagicMock()
@@ -591,7 +597,7 @@ class PwaDownloaderTests(unittest.TestCase):
         encrypted_response.status_code = 200
         encrypted_response.json.return_value = {'data': {'e': 'encrypted', 't': 'token'}}
 
-        with mock.patch('cs_demo_downloader.core.downloader_pwa.requests.get', side_effect=[recent_response, encrypted_response]):
+        with mock.patch('cs_demo_downloader.core.downloader_pwa.requests.get', side_effect=[recent_response, encrypted_response]) as get:
             records = get_match_list_records(
                 'steamid',
                 'sample-token',
@@ -601,6 +607,12 @@ class PwaDownloaderTests(unittest.TestCase):
             )
 
         self.assertEqual([], records)
+        encrypted_params = get.call_args_list[-1].kwargs['params']
+        self.assertEqual('10', encrypted_params['page_size'])
+        self.assertEqual('10,12,14,16,27,20,33,40,41,44,51', encrypted_params['game_types'])
+        self.assertEqual('2026-03-06 16:00:00', encrypted_params['start_time'])
+        self.assertEqual('2026-06-05 15:59:59', encrypted_params['end_time'])
+        self.assertEqual('', encrypted_params['ticket_id'])
 
     def test_get_match_list_records_uses_compiled_wheel_decryptor_for_encrypted_match_list(self):
         recent_response = mock.MagicMock()

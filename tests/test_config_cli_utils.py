@@ -19,8 +19,11 @@ from cs_demo_downloader.core.config import Config, ConfigLoadError, load_config
 from cs_demo_downloader.core.downloader_pwa import (
     PwaSignerUnavailableError,
     build_download_headers,
+    build_pwa_list_headers,
+    call_pwa_et_decryptor_exe,
     get_all_demo_urls as get_pwa_demo_urls,
     get_demo_url,
+    get_match_list_records,
     sign_demo_request,
 )
 from cs_demo_downloader.core.downloader_steam import decode_share_code, get_all_demo_urls, resolve_demo_url_from_share_code
@@ -482,6 +485,165 @@ class PwaDownloaderTests(unittest.TestCase):
         self.assertIn('access_token=sample-token&cup_id=0&match_id=987654321', demo_url)
         self.assertIn('s=compiled-signature', demo_url)
 
+    def test_get_match_list_records_includes_signed_query(self):
+        response = mock.MagicMock()
+        response.status_code = 200
+        response.json.return_value = {'data': [{'match': 'match-1'}]}
+
+        with mock.patch('cs_demo_downloader.core.downloader_pwa.random.randint', return_value=123456):
+            with mock.patch('cs_demo_downloader.core.downloader_pwa.time.time', return_value=1710000000):
+                with mock.patch('cs_demo_downloader.core.downloader_pwa.requests.get', return_value=response) as get:
+                    records = get_match_list_records(
+                        'steamid',
+                        'sample-token',
+                        size=10,
+                        signer=lambda randnum, timestamp, data: f'signed:{randnum}:{timestamp}:{data}',
+                    )
+
+        self.assertEqual([{'match': 'match-1'}], records)
+        params = get.call_args.kwargs['params']
+        self.assertEqual('20000', params['a'])
+        self.assertEqual('123456', params['r'])
+        self.assertEqual('1710000000', params['t'])
+        self.assertEqual('sample-token', params['access_token'])
+        self.assertEqual('10', params['size'])
+        self.assertEqual('steamid', params['uid'])
+        self.assertEqual('signed:123456:1710000000:access_token=sample-token&size=10&uid=steamid', params['s'])
+        headers = get.call_args.kwargs['headers']
+        self.assertEqual('https://client.wmpvp.com/', headers['Referer'])
+        self.assertEqual('none', headers['sec-fetch-site'])
+        self.assertEqual('no-cors', headers['sec-fetch-mode'])
+        self.assertIn('steam_cn_token=sample-token', headers['Cookie'])
+
+    def test_get_match_list_records_can_query_explicit_season(self):
+        response = mock.MagicMock()
+        response.status_code = 200
+        response.json.return_value = {'data': [{'match': 'match-s23'}]}
+
+        with mock.patch('cs_demo_downloader.core.downloader_pwa.random.randint', return_value=123456):
+            with mock.patch('cs_demo_downloader.core.downloader_pwa.time.time', return_value=1710000000):
+                with mock.patch('cs_demo_downloader.core.downloader_pwa.requests.get', return_value=response) as get:
+                    records = get_match_list_records(
+                        'steamid',
+                        'sample-token',
+                        size=10,
+                        season='S23',
+                        signer=lambda _randnum, _timestamp, data: f'signed:{data}',
+                    )
+
+        self.assertEqual([{'match': 'match-s23'}], records)
+        params = get.call_args.kwargs['params']
+        self.assertEqual('S23', params['season'])
+        self.assertEqual('signed:access_token=sample-token&season=S23&size=10&uid=steamid', params['s'])
+
+    def test_get_match_list_records_falls_back_to_decrypted_previous_season(self):
+        empty_response = mock.MagicMock()
+        empty_response.status_code = 200
+        empty_response.json.return_value = {'data': []}
+        current_season_response = mock.MagicMock()
+        current_season_response.status_code = 200
+        current_season_response.json.return_value = {'data': {'season': 'S24'}}
+        season_list_response = mock.MagicMock()
+        season_list_response.status_code = 200
+        season_list_response.json.return_value = {
+            'data': [
+                {'season': 'S23', 'match_count': 72, 'score': 2005},
+            ]
+        }
+        current_season_match_response = mock.MagicMock()
+        current_season_match_response.status_code = 200
+        current_season_match_response.json.return_value = {'data': []}
+        current_encrypted_response = mock.MagicMock()
+        current_encrypted_response.status_code = 200
+        current_encrypted_response.json.return_value = {'data': {'e': 'encrypted-s24', 't': 'token-s24'}}
+        previous_recent_response = mock.MagicMock()
+        previous_recent_response.status_code = 200
+        previous_recent_response.json.return_value = {'data': []}
+        previous_encrypted_response = mock.MagicMock()
+        previous_encrypted_response.status_code = 200
+        previous_encrypted_response.json.return_value = {'data': {'e': 'encrypted-s23', 't': 'token-s23'}}
+
+        def fake_decryptor(encrypted, token):
+            if (encrypted, token) == ('encrypted-s23', 'token-s23'):
+                return {'list': [{'match_id': 'match-s23'}]}
+            return {'list': []}
+
+        with mock.patch('cs_demo_downloader.core.downloader_pwa.requests.get', side_effect=[empty_response, season_list_response, current_season_match_response, current_encrypted_response, previous_recent_response, previous_encrypted_response]) as get:
+            with mock.patch('cs_demo_downloader.core.downloader_pwa.requests.post', return_value=current_season_response):
+                records = get_match_list_records(
+                    'steamid',
+                    'sample-token',
+                    size=10,
+                    signer=lambda _randnum, _timestamp, _data: 'signed',
+                    max_seasons=2,
+                    et_decryptor=fake_decryptor,
+                )
+
+        self.assertEqual([{'match_id': 'match-s23', 'match': 'match-s23', 'season': 'S23'}], records)
+        requested_seasons = [call.kwargs['params'].get('season') for call in get.call_args_list if 'params' in call.kwargs]
+        self.assertIn('S23', requested_seasons)
+
+    def test_get_match_list_records_returns_empty_without_decryptor_for_encrypted_match_list(self):
+        recent_response = mock.MagicMock()
+        recent_response.status_code = 200
+        recent_response.json.return_value = {'data': []}
+        encrypted_response = mock.MagicMock()
+        encrypted_response.status_code = 200
+        encrypted_response.json.return_value = {'data': {'e': 'encrypted', 't': 'token'}}
+
+        with mock.patch('cs_demo_downloader.core.downloader_pwa.requests.get', side_effect=[recent_response, encrypted_response]):
+            records = get_match_list_records(
+                'steamid',
+                'sample-token',
+                size=10,
+                season='S23',
+                signer=lambda _randnum, _timestamp, _data: 'signed',
+            )
+
+        self.assertEqual([], records)
+
+    def test_get_match_list_records_uses_compiled_wheel_decryptor_for_encrypted_match_list(self):
+        recent_response = mock.MagicMock()
+        recent_response.status_code = 200
+        recent_response.json.return_value = {'data': []}
+        encrypted_response = mock.MagicMock()
+        encrypted_response.status_code = 200
+        encrypted_response.json.return_value = {'data': {'e': 'encrypted', 't': 'token'}}
+        compiled_signer = SimpleNamespace(decrypt_pwa_response=mock.Mock(return_value='[{"match_id":"match-s23"}]'))
+
+        with mock.patch('cs_demo_downloader.core.downloader_pwa.requests.get', side_effect=[recent_response, encrypted_response]):
+            with mock.patch('cs_demo_downloader.core.downloader_pwa._load_compiled_signer', return_value=compiled_signer):
+                records = get_match_list_records(
+                    'steamid',
+                    'sample-token',
+                    size=10,
+                    season='S23',
+                    signer=lambda _randnum, _timestamp, _data: 'signed',
+                )
+
+        self.assertEqual([{'match_id': 'match-s23', 'match': 'match-s23'}], records)
+        compiled_signer.decrypt_pwa_response.assert_called_once_with('encrypted', 'token')
+
+    def test_call_pwa_et_decryptor_exe_sends_encrypted_payload_on_stdin(self):
+        completed = SimpleNamespace(returncode=0, stdout='[{"match_id":"m1"}]\n', stderr='')
+
+        with mock.patch('cs_demo_downloader.core.downloader_pwa.subprocess.run', return_value=completed) as run:
+            plaintext = call_pwa_et_decryptor_exe('ciphertext', 'nonce-token', '/private/pwa-decryptor.exe', timeout=7)
+
+        self.assertEqual('[{"match_id":"m1"}]', plaintext)
+        self.assertEqual(('/private/pwa-decryptor.exe',), run.call_args.args[0])
+        self.assertEqual('{"e":"ciphertext","t":"nonce-token"}', run.call_args.kwargs['input'])
+        self.assertEqual(7, run.call_args.kwargs['timeout'])
+
+    def test_build_pwa_list_headers_can_include_acw_tc_cookie(self):
+        headers = build_pwa_list_headers('steamid', 'token', acw_tc='edge-cookie')
+
+        self.assertEqual('steamid', headers['pwasteamid'])
+        self.assertEqual('steamid', headers['x-pwa-steamid'])
+        self.assertEqual('https://client.wmpvp.com/', headers['Referer'])
+        self.assertIn('steam_cn_token=token', headers['Cookie'])
+        self.assertIn('acw_tc=edge-cookie', headers['Cookie'])
+
     def test_build_download_headers_includes_pwa_signature(self):
         compiled_signer = SimpleNamespace(build_x_pwa_signature=mock.Mock(return_value='1710000000-compiled'))
         with mock.patch('cs_demo_downloader.core.downloader_pwa._load_compiled_signer', return_value=compiled_signer):
@@ -830,6 +992,22 @@ class PwaSignerSelectionTests(unittest.TestCase):
             cli.build_pwa_demo_url_signer(config)
 
         self.assertIn('Unsupported PWA signature_provider', str(ctx.exception))
+
+    def test_build_pwa_et_decryptor_invokes_private_exe_boundary(self):
+        config = Config(pwa={
+            'pwa_response_decryptor_exe': '/private/pwa-decryptor.exe',
+            'pwa_response_decryptor_timeout': '15',
+        })
+
+        with mock.patch('cs_demo_downloader.cli.call_pwa_et_decryptor_exe', return_value='[]') as call:
+            decryptor = cli.build_pwa_et_decryptor(config)
+            if decryptor is None:
+                self.fail('expected PWA e/t decryptor')
+            plaintext = decryptor('ciphertext', 'nonce-token')
+
+        self.assertEqual('[]', plaintext)
+        self.assertEqual('/private/pwa-decryptor.exe', call.call_args.kwargs['executable_path'])
+        self.assertEqual(15, call.call_args.kwargs['timeout'])
 
 
 class Bz2DownloadTests(unittest.TestCase):

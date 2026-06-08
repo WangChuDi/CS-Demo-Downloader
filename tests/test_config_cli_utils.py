@@ -624,6 +624,28 @@ class PwaDownloaderTests(unittest.TestCase):
         self.assertEqual([{'match_id': 'match-s23', 'match': 'match-s23'}], records)
         compiled_signer.decrypt_pwa_response.assert_called_once_with('encrypted', 'token')
 
+    def test_get_match_list_records_returns_empty_when_compiled_decryptor_rejects_payload(self):
+        recent_response = mock.MagicMock()
+        recent_response.status_code = 200
+        recent_response.json.return_value = {'data': []}
+        encrypted_response = mock.MagicMock()
+        encrypted_response.status_code = 200
+        encrypted_response.json.return_value = {'data': {'e': 'encrypted', 't': 'token'}}
+        compiled_signer = SimpleNamespace(decrypt_pwa_response=mock.Mock(side_effect=ValueError('invalid PWA response decrypt token')))
+
+        with mock.patch('cs_demo_downloader.core.downloader_pwa.requests.get', side_effect=[recent_response, encrypted_response]):
+            with mock.patch('cs_demo_downloader.core.downloader_pwa._load_compiled_signer', return_value=compiled_signer):
+                records = get_match_list_records(
+                    'steamid',
+                    'sample-token',
+                    size=10,
+                    season='S23',
+                    signer=lambda _randnum, _timestamp, _data: 'signed',
+                )
+
+        self.assertEqual([], records)
+        compiled_signer.decrypt_pwa_response.assert_called_once_with('encrypted', 'token')
+
     def test_call_pwa_et_decryptor_exe_sends_encrypted_payload_on_stdin(self):
         completed = SimpleNamespace(returncode=0, stdout='[{"match_id":"m1"}]\n', stderr='')
 

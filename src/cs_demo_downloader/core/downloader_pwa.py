@@ -111,7 +111,7 @@ def decrypt_pwa_et_payload(
     if decrypted is None:
         try:
             decrypted = _load_compiled_signer().decrypt_pwa_response(encrypted, token)
-        except (PwaSignerUnavailableError, AttributeError) as exc:
+        except (PwaSignerUnavailableError, AttributeError, ValueError) as exc:
             if not decryptor_exe:
                 print(f'PWA e/t decryptor unavailable: {exc}')
                 return None

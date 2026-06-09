@@ -112,6 +112,8 @@ Example schema:
 {
   // "." downloads into the current working directory.
   "download_path": ".",
+  // When true, successful 5E/PWA demo downloads also write <demo>.metadata.json next to the .dem file.
+  "save_metadata_with_demo": false,
   "scheduler": {
     "enabled": false,
     "interval_seconds": 86400,
@@ -197,10 +199,12 @@ The `userid` value is `11814738gjdwn7`.
 
 ### Perfect World Arena Steam ID and Access Token
 
-1. Log in to the Perfect World Arena web page or client.
-2. Open browser developer tools.
-3. Inspect authenticated network requests or cookies.
-4. Fill `pwa.default_access_token` and each target `steamid` in `config.jsonc`.
+This follows the same convention as the legacy [`WangChuDi/pwa_demo_downloader`](https://github.com/WangChuDi/pwa_demo_downloader) project:
+
+1. `steamid` is the target user's SteamID64, for example `76561198159976336`. If a Steam profile uses a custom URL, look it up with a SteamID lookup tool such as `https://steamid.io/lookup/`.
+2. Log in at `https://partner.wmpvp.com/#/login`.
+3. Read the `access_token` from the logged-in browser cookie. Do not commit this token or paste it into issue reports.
+4. Fill `pwa.default_access_token` and each target `steamid` in `config.jsonc`. A per-user `access_token` can override the default token.
 
 PWA demo download links are now generated with the current signed query parameters and the downloader sends the required PWA request headers for the final file request. Tokens can expire. If PWA downloads stop working, refresh the token first.
 
@@ -312,6 +316,8 @@ Download all configured platforms:
 ```bash
 cs-demo-downloader download --all --config config.jsonc
 ```
+
+Set `save_metadata_with_demo` to `true` in `config.jsonc` if you want each successful 5E/PWA download to also save normalized metadata beside the extracted demo, using the same base filename and a `.metadata.json` suffix. For example, `match-1.dem` will be accompanied by `match-1.metadata.json`. The automatic file uses the same safe serialization as the metadata command: URL tokens/signatures are redacted and raw platform payloads are omitted.
 
 Download only 5EPlay demos:
 

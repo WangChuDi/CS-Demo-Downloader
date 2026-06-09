@@ -61,6 +61,8 @@ cp config.jsonc.example config.jsonc
 {
   // "." 表示下载到当前运行目录。
   "download_path": ".",
+  // 为 true 时，成功下载 5E/PWA Demo 后会在 .dem 同目录写入 <demo>.metadata.json。
+  "save_metadata_with_demo": false,
   "scheduler": {
     "enabled": false,
     "interval_seconds": 86400,
@@ -143,10 +145,12 @@ https://www.5eplay.com/player/11814738gjdwn7
 
 ### 获取完美世界电竞 Steam ID 和 Access Token
 
-1. 登录完美世界电竞网页版或客户端。
-2. 打开浏览器开发者工具。
-3. 在 Network 请求或 Cookie 中查找已登录请求。
-4. 将 `pwa.default_access_token` 和每个目标 `steamid` 填入 `config.jsonc`。
+这里参考旧项目 [`WangChuDi/pwa_demo_downloader`](https://github.com/WangChuDi/pwa_demo_downloader) 的使用方式：
+
+1. `steamid` 填目标用户的 SteamID64，例如 `76561198159976336`。Steam 个人资料 URL 末尾通常就是 SteamID64；如果设置了自定义 URL，可以用 `https://steamid.io/lookup/` 之类的工具反查。
+2. 登录 `https://partner.wmpvp.com/#/login`。
+3. 从登录后的浏览器 Cookie 中读取 `access_token`。不要把 token 提交到仓库，也不要贴到 issue 或日志里。
+4. 将 `pwa.default_access_token` 和每个目标 `steamid` 填入 `config.jsonc`。单个用户也可以设置自己的 `access_token` 覆盖默认 token。
 
 PWA Demo 下载链接现在会使用当前签名参数生成，并在最终文件请求中发送必要的 PWA 请求头。Access Token 可能会过期。如果 PWA 下载突然不可用，优先刷新 token。
 
@@ -240,6 +244,8 @@ cs-demo-downloader schedule --help
 ```bash
 cs-demo-downloader download --all --config config.jsonc
 ```
+
+如果希望下载 Demo 时自动把 metadata 保存到 Demo 同目录，请在 `config.jsonc` 设置 `save_metadata_with_demo: true`。成功下载 5E/PWA Demo 后，程序会使用同名 `.metadata.json` 后缀写出规范化 metadata，例如 `match-1.dem` 旁边会生成 `match-1.metadata.json`。这个自动文件使用与 `metadata` 命令一致的安全序列化：URL 里的 token/signature 会脱敏，并默认省略平台原始 raw 字段。
 
 只下载 5E Demo：
 

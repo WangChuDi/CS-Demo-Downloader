@@ -2,9 +2,11 @@
 
 用于下载 Counter-Strike Demo 文件，支持 5E、完美世界电竞 / PWA 和 Steam 官匹。
 
-[English README](README.md) · [详细使用 Wiki](https://github.com/WangChuDi/CS-Demo-Downloader/wiki)
+[English README](README.md) · [中文详细使用 Wiki](https://github.com/WangChuDi/CS-Demo-Downloader/wiki/使用指南)
 
 ## pip 快速开始
+
+完整 pip 安装和 CLI 说明：[Wiki 安装说明](https://github.com/WangChuDi/CS-Demo-Downloader/wiki/使用指南#2-安装) 与 [Wiki CLI 说明](https://github.com/WangChuDi/CS-Demo-Downloader/wiki/使用指南#5-cli-使用)。
 
 ```bash
 pip install cs-demo-downloader
@@ -24,7 +26,43 @@ cs-demo-downloader download --platform steam --config config.jsonc
 cs-demo-downloader download --all --config config.jsonc --output ./demos
 ```
 
+### Python API 快速开始
+
+完整 Python 示例：[Wiki Python API 说明](https://github.com/WangChuDi/CS-Demo-Downloader/wiki/使用指南#8-python-api)。
+
+5E Demo URL：
+
+```python
+from cs_demo_downloader.core.downloader_5e import get_all_demo_urls
+
+demo_urls = get_all_demo_urls("YOUR_5E_USERID")
+```
+
+PWA Demo URL 需要 signed URL 和 PWA 下载请求头。生成的 URL 包含 `access_token`，不要打印或持久化保存。
+
+```python
+from cs_demo_downloader.core.downloader_pwa import build_download_headers, get_all_demo_urls
+
+steamid = "YOUR_STEAM_ID64"
+access_token = "YOUR_PWA_ACCESS_TOKEN"
+
+headers = build_download_headers(steamid)
+demo_urls = get_all_demo_urls(steamid, access_token, size=20)
+```
+
+规范化 metadata：
+
+```python
+from cs_demo_downloader.core.downloader_5e import get_all_demo_metadata as get_5e_metadata
+from cs_demo_downloader.core.metadata import metadata_list_to_dicts
+
+matches = get_5e_metadata("YOUR_5E_USERID", limit=10)
+payload = metadata_list_to_dicts(matches, redact_sensitive_urls=True, include_raw=False)
+```
+
 ## Docker 快速开始
+
+完整 Docker 说明、scheduler 行为和镜像变体：[Wiki Docker 说明](https://github.com/WangChuDi/CS-Demo-Downloader/wiki/使用指南#7-docker-使用)。
 
 ```bash
 mkdir -p config demos
@@ -55,6 +93,8 @@ docker run --rm \
 ```
 
 ## 配置
+
+完整 JSONC schema 和兼容性说明：[Wiki 配置说明](https://github.com/WangChuDi/CS-Demo-Downloader/wiki/使用指南#3-配置文件)。
 
 最小配置结构：
 
@@ -88,6 +128,8 @@ docker run --rm \
 ```
 
 ## 平台凭据
+
+完整平台凭据说明：[Wiki 平台凭据说明](https://github.com/WangChuDi/CS-Demo-Downloader/wiki/使用指南#4-平台凭据)。
 
 ### 5E
 
@@ -123,6 +165,8 @@ Steam Web API 可以迭代 share code，但真实 replay URL 仍需要 Steam Gam
 
 ## Metadata
 
+完整 metadata 命令和 schema 说明：[Wiki Metadata 说明](https://github.com/WangChuDi/CS-Demo-Downloader/wiki/使用指南#6-metadata)。
+
 只导出 metadata，不下载 Demo：
 
 ```bash
@@ -137,7 +181,7 @@ cs-demo-downloader metadata --all --config config.jsonc --pretty
 
 ## 更多文档
 
-详细配置、Steam resolver、Docker Compose、Python API、metadata 结构和开发说明请看 [项目 Wiki](https://github.com/WangChuDi/CS-Demo-Downloader/wiki)。
+详细 Steam resolver、Docker Compose、PWA DLL 更新器、测试和限制说明请看 [中文详细使用 Wiki](https://github.com/WangChuDi/CS-Demo-Downloader/wiki/使用指南)。
 
 ## 许可证
 

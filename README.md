@@ -2,9 +2,11 @@
 
 Download Counter-Strike demos from 5EPlay, Perfect World Arena, and Steam official matchmaking.
 
-[中文文档](README_CN.md) · [Detailed usage wiki](https://github.com/WangChuDi/CS-Demo-Downloader/wiki)
+[中文文档](README_CN.md) · [Detailed usage wiki](https://github.com/WangChuDi/CS-Demo-Downloader/wiki/Usage-Guide)
 
 ## Quick start with pip
+
+Full pip install and CLI details: [wiki install guide](https://github.com/WangChuDi/CS-Demo-Downloader/wiki/Usage-Guide#2-install) and [wiki CLI guide](https://github.com/WangChuDi/CS-Demo-Downloader/wiki/Usage-Guide#5-cli-usage).
 
 ```bash
 pip install cs-demo-downloader
@@ -24,7 +26,43 @@ cs-demo-downloader download --platform steam --config config.jsonc
 cs-demo-downloader download --all --config config.jsonc --output ./demos
 ```
 
+### Python API quick start
+
+Full Python examples: [wiki Python API guide](https://github.com/WangChuDi/CS-Demo-Downloader/wiki/Usage-Guide#8-python-api).
+
+5EPlay demo URLs:
+
+```python
+from cs_demo_downloader.core.downloader_5e import get_all_demo_urls
+
+demo_urls = get_all_demo_urls("YOUR_5E_USERID")
+```
+
+PWA demo URLs need both the signed URL and PWA download headers. Do not print or persist generated URLs because they contain `access_token`.
+
+```python
+from cs_demo_downloader.core.downloader_pwa import build_download_headers, get_all_demo_urls
+
+steamid = "YOUR_STEAM_ID64"
+access_token = "YOUR_PWA_ACCESS_TOKEN"
+
+headers = build_download_headers(steamid)
+demo_urls = get_all_demo_urls(steamid, access_token, size=20)
+```
+
+Normalized metadata:
+
+```python
+from cs_demo_downloader.core.downloader_5e import get_all_demo_metadata as get_5e_metadata
+from cs_demo_downloader.core.metadata import metadata_list_to_dicts
+
+matches = get_5e_metadata("YOUR_5E_USERID", limit=10)
+payload = metadata_list_to_dicts(matches, redact_sensitive_urls=True, include_raw=False)
+```
+
 ## Quick start with Docker
+
+Full Docker details, scheduler behavior, and image variants: [wiki Docker guide](https://github.com/WangChuDi/CS-Demo-Downloader/wiki/Usage-Guide#7-docker).
 
 ```bash
 mkdir -p config demos
@@ -55,6 +93,8 @@ docker run --rm \
 ```
 
 ## Configuration
+
+Full JSONC schema and compatibility notes: [wiki configuration guide](https://github.com/WangChuDi/CS-Demo-Downloader/wiki/Usage-Guide#3-configuration).
 
 Minimal config shape:
 
@@ -88,6 +128,8 @@ Minimal config shape:
 ```
 
 ## Platform credentials
+
+Full platform credential notes: [wiki credentials guide](https://github.com/WangChuDi/CS-Demo-Downloader/wiki/Usage-Guide#4-credentials).
 
 ### 5EPlay
 
@@ -123,6 +165,8 @@ Steam Web API can iterate share codes, but the real replay URL requires Steam Ga
 
 ## Metadata
 
+Full metadata command and schema details: [wiki metadata guide](https://github.com/WangChuDi/CS-Demo-Downloader/wiki/Usage-Guide#6-metadata).
+
 Export metadata without downloading demos:
 
 ```bash
@@ -137,7 +181,7 @@ Or set this in `config.jsonc` to write `*.metadata.json` next to each successful
 
 ## More documentation
 
-Detailed configuration, Steam resolvers, Docker Compose, Python API examples, metadata schema, and development notes live in the [project wiki](https://github.com/WangChuDi/CS-Demo-Downloader/wiki).
+Detailed Steam resolvers, Docker Compose, PWA DLL updater, tests, and limitations live in the [project wiki](https://github.com/WangChuDi/CS-Demo-Downloader/wiki/Usage-Guide).
 
 ## License
 

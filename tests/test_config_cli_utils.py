@@ -221,6 +221,7 @@ class CliTests(unittest.TestCase):
         with mock.patch.dict(os.environ, {
             'CS_DEMO_SCHEDULE_ENABLED': 'true',
             'CS_DEMO_SCHEDULE_INTERVAL_SECONDS': '45',
+            'CS_DEMO_SCHEDULE_DAILY_TIME': '08:30',
             'CS_DEMO_SCHEDULE_RUN_ON_START': 'yes',
             'CS_DEMO_SCHEDULE_CONFIG': '/config/from-env.jsonc',
             'CS_DEMO_SCHEDULE_OUTPUT': '/from-env',
@@ -230,6 +231,7 @@ class CliTests(unittest.TestCase):
 
         self.assertTrue(settings.enabled)
         self.assertEqual(45, settings.interval_seconds)
+        self.assertEqual('08:30', settings.daily_time)
         self.assertTrue(settings.run_on_start)
         self.assertEqual('/config/from-env.jsonc', settings.config_path)
         self.assertEqual('/from-env', settings.output_path)

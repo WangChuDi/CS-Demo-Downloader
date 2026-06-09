@@ -4,6 +4,7 @@ CS Demo Downloader - 命令行入口
 用于脚本和 Docker 自动化下载
 """
 import argparse
+import datetime
 import json
 import os
 import signal
@@ -14,7 +15,7 @@ from dataclasses import dataclass
 from types import FrameType
 from typing import Callable
 
-from .core.config import Config, ConfigLoadError, load_config
+from .core.config import Config, ConfigLoadError, load_config, write_default_docker_config
 from .core.downloader_5e import get_all_demo_urls as get_5e_demos
 from .core.downloader_5e import get_all_demo_metadata as get_5e_metadata
 from .core.downloader_pwa import build_download_headers as build_pwa_download_headers
@@ -22,6 +23,7 @@ from .core.downloader_pwa import call_pwa_et_decryptor_exe
 from .core.downloader_pwa import get_all_demo_urls as get_pwa_demos
 from .core.downloader_pwa import get_all_demo_metadata as get_pwa_metadata
 from .core.downloader_steam import get_all_demo_urls as get_steam_demos
+from .core.logging import log_error, log_info
 from .core.metadata import MatchMetadata, metadata_list_to_dicts
 from .core.utils import download_and_extract, get_demo_filename_from_url, redact_url
 from .pwa_dll_updater import LATEST_YML_URL, PvpAliveUpdateError, update_cached_pvp_alive_dll
@@ -44,6 +46,7 @@ class SchedulerConfigError(ValueError):
 class SchedulerSettings:
     enabled: bool = False
     interval_seconds: int = 86400
+    daily_time: str | None = None
     run_on_start: bool = False
     config_path: str | None = None
     output_path: str | None = None
@@ -51,50 +54,68 @@ class SchedulerSettings:
 
 
 def print_progress(downloaded: int, total: int):
-    """打印下载进度"""
-    if total > 0:
-        percent = int(100 * downloaded / total)
+    """Print download progress without flooding container logs."""
+    if total <= 0:
+        return
+
+    percent = int(100 * downloaded / total)
+    progress_mode = os.environ.get('CS_DEMO_PROGRESS', 'auto').strip().lower()
+    if progress_mode == 'none':
+        return
+
+    if progress_mode == 'bar' or (progress_mode == 'auto' and sys.stdout.isatty()):
         bar_len = 50
         filled = int(bar_len * downloaded / total)
         bar = '=' * filled + '-' * (bar_len - filled)
         print(f'\r[{bar}] {percent}%', end='', flush=True)
+        if downloaded >= total:
+            print(flush=True)
+        return
+
+    bucket = min(100, (percent // 10) * 10)
+    last_bucket = getattr(print_progress, '_last_plain_bucket', -10)
+    if bucket >= 100 or bucket > last_bucket:
+        log_info(f'Download progress: {bucket}%')
+        setattr(print_progress, '_last_plain_bucket', bucket)
+    if downloaded >= total:
+        setattr(print_progress, '_last_plain_bucket', -10)
 
 
 def download_5e_demos(config: Config):
     """下载所有 5E 用户的 Demo"""
     users = config.get_users_5e()
     if not users:
-        print("No 5E users configured.")
+        log_info('No 5E users configured.')
         return
 
     for user in users:
-        print(f"\n=== Downloading 5E demos for {user.label} ===")
+        log_info(f'Downloading 5E demos for {user.label}.')
         if config.save_metadata_with_demo:
             metadata_matches = get_5e_metadata(user.userid)
             if not metadata_matches:
-                print(f"No demos found for {user.label}")
+                log_info(f'No demos found for {user.label}.')
                 continue
 
-            print(f"Found {len(metadata_matches)} demos")
+            log_info(f'Found {len(metadata_matches)} demos.')
             for match in metadata_matches:
                 if not match.demo_url:
                     continue
-                print(f"\nMatch {match.match_id}: {match.demo_url}")
+                log_info(f'Match {match.match_id}: {match.demo_url}')
                 if download_and_extract(match.demo_url, config.download_path, print_progress):
                     write_demo_metadata(match, config.download_path)
-                print()
+                print(flush=True)
             continue
 
         demo_urls = get_5e_demos(user.userid)
 
         if not demo_urls:
-            print(f"No demos found for {user.label}")
+            log_info(f'No demos found for {user.label}.')
             continue
 
-        print(f"Found {len(demo_urls)} demos")
+        log_info(f'Found {len(demo_urls)} demos.')
 
         for match_id, demo_url in demo_urls.items():
-            print(f"\nMatch {match_id}: {demo_url}")
+            log_info(f'Match {match_id}: {demo_url}')
             download_and_extract(demo_url, config.download_path, print_progress)
             print()
 
@@ -103,15 +124,15 @@ def download_pwa_demos(config: Config):
     """下载所有完美世界用户的 Demo"""
     users = config.get_users_pwa()
     if not users:
-        print("No PWA users configured.")
+        log_info('No PWA users configured.')
         return
 
     for user in users:
-        print(f"\n=== Downloading PWA demos for {user.label} ===")
+        log_info(f'Downloading PWA demos for {user.label}.')
         try:
             signer = build_pwa_demo_url_signer(config)
         except RuntimeError as e:
-            print(f"Unable to configure PWA signer for {user.label}: {e}", file=sys.stderr)
+            log_error(f'Unable to configure PWA signer for {user.label}: {e}')
             continue
         decryptor = build_pwa_et_decryptor(config)
         if config.save_metadata_with_demo:
@@ -122,38 +143,38 @@ def download_pwa_demos(config: Config):
                 et_decryptor=decryptor,
             )
             if not metadata_matches:
-                print(f"No demos found for {user.label}")
+                log_info(f'No demos found for {user.label}.')
                 continue
 
-            print(f"Found {len(metadata_matches)} demos")
+            log_info(f'Found {len(metadata_matches)} demos.')
             for match in metadata_matches:
                 if not match.demo_url:
                     continue
-                print(f"\nMatch {match.match_id}: {redact_url(match.demo_url)}")
+                log_info(f'Match {match.match_id}: {redact_url(match.demo_url)}')
                 try:
                     headers = build_pwa_download_headers(user.steamid)
                 except RuntimeError as e:
-                    print(f"Unable to build PWA download headers for {user.label}: {e}", file=sys.stderr)
+                    log_error(f'Unable to build PWA download headers for {user.label}: {e}')
                     continue
                 if download_and_extract(match.demo_url, config.download_path, print_progress, headers=headers):
                     write_demo_metadata(match, config.download_path)
-                print()
+                print(flush=True)
             continue
 
         demo_urls = get_pwa_demos(user.steamid, user.access_token, signer=signer, et_decryptor=decryptor)
 
         if not demo_urls:
-            print(f"No demos found for {user.label}")
+            log_info(f'No demos found for {user.label}.')
             continue
 
-        print(f"Found {len(demo_urls)} demos")
+        log_info(f'Found {len(demo_urls)} demos.')
 
         for match_id, demo_url in demo_urls.items():
-            print(f"\nMatch {match_id}: {redact_url(demo_url)}")
+            log_info(f'Match {match_id}: {redact_url(demo_url)}')
             try:
                 headers = build_pwa_download_headers(user.steamid)
             except RuntimeError as e:
-                print(f"Unable to build PWA download headers for {user.label}: {e}", file=sys.stderr)
+                log_error(f'Unable to build PWA download headers for {user.label}: {e}')
                 continue
             download_and_extract(demo_url, config.download_path, print_progress, headers=headers)
             print()
@@ -229,9 +250,9 @@ def write_demo_metadata(match: MatchMetadata, demo_path: str) -> str | None:
             json.dump(payload, metadata_file, ensure_ascii=False, indent=2)
             metadata_file.write('\n')
     except OSError as e:
-        print(f"Error writing metadata '{metadata_path}': {e}", file=sys.stderr)
+        log_error(f"Error writing metadata '{metadata_path}': {e}")
         return None
-    print(f"Metadata saved to {metadata_path}")
+    log_info(f'Metadata saved to {metadata_path}')
     return metadata_path
 
 
@@ -293,13 +314,13 @@ def download_steam_demos(config: Config):
     """下载所有 Steam 官匹用户的 Demo"""
     users = config.get_users_steam()
     if not users:
-        print("No Steam users configured.")
+        log_info('No Steam users configured.')
         return
 
     demo_url_resolver = build_steam_demo_url_resolver(config)
 
     for user in users:
-        print(f"\n=== Downloading Steam official demos for {user.label} ===")
+        log_info(f'Downloading Steam official demos for {user.label}.')
         demo_urls = get_steam_demos(
             user.api_key,
             user.steamid,
@@ -309,13 +330,13 @@ def download_steam_demos(config: Config):
         )
 
         if not demo_urls:
-            print(f"No demos found for {user.label}")
+            log_info(f'No demos found for {user.label}.')
             continue
 
-        print(f"Found {len(demo_urls)} demos")
+        log_info(f'Found {len(demo_urls)} demos.')
 
         for match_id, demo_url in demo_urls.items():
-            print(f"\nMatch {match_id}: {demo_url}")
+            log_info(f'Match {match_id}: {demo_url}')
             download_and_extract(demo_url, config.download_path, print_progress)
             print()
 
@@ -330,10 +351,10 @@ def run_download(config: Config, output_path: str | None = None, platforms: list
     try:
         os.makedirs(config.download_path, exist_ok=True)
     except OSError as e:
-        print(f"Error creating download path '{config.download_path}': {e}", file=sys.stderr)
+        log_error(f"Error creating download path '{config.download_path}': {e}")
         return 1
 
-    print(f"Download path: {config.download_path}")
+    log_info(f'Download path: {config.download_path}')
 
     selected_platforms = platforms or list(VALID_PLATFORMS)
     for platform in selected_platforms:
@@ -344,7 +365,7 @@ def run_download(config: Config, output_path: str | None = None, platforms: list
         elif platform == 'steam':
             download_steam_demos(config)
 
-    print("\n=== Download complete ===")
+    log_info('Download complete.')
     return 0
 
 
@@ -355,9 +376,10 @@ def run_download_command(
     all_platforms: bool,
 ) -> int:
     try:
+        config_path = _ensure_default_config(config_path, os.environ)
         config = load_config(config_path)
-    except ConfigLoadError as e:
-        print(e, file=sys.stderr)
+    except (ConfigLoadError, SchedulerConfigError, OSError) as e:
+        log_error(str(e))
         return 1
 
     platforms = None if all_platforms or platform is None else [platform]
@@ -385,7 +407,7 @@ def collect_pwa_metadata(config: Config, limit: int) -> list[MatchMetadata]:
         try:
             signer = build_pwa_demo_url_signer(config)
         except RuntimeError as e:
-            print(f"Unable to configure PWA signer for {user.label}: {e}", file=sys.stderr)
+            log_error(f'Unable to configure PWA signer for {user.label}: {e}')
             continue
         decryptor = build_pwa_et_decryptor(config)
         matches.extend(get_pwa_metadata(user.steamid, user.access_token, size=limit, signer=signer, et_decryptor=decryptor))
@@ -429,7 +451,7 @@ def run_metadata_command(
     try:
         config = load_config(config_path)
     except ConfigLoadError as e:
-        print(e, file=sys.stderr)
+        log_error(str(e))
         return 1
 
     return run_metadata(
@@ -463,6 +485,86 @@ def _parse_positive_int(value: object, field_name: str) -> int:
     if parsed <= 0:
         raise SchedulerConfigError(f"{field_name} must be a positive integer")
     return parsed
+
+
+def _parse_daily_time(value: object, field_name: str) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    if not text:
+        return None
+    parts = text.split(':')
+    if len(parts) != 2:
+        raise SchedulerConfigError(f"{field_name} must use HH:MM format")
+    try:
+        hour = int(parts[0])
+        minute = int(parts[1])
+    except ValueError as e:
+        raise SchedulerConfigError(f"{field_name} must use HH:MM format") from e
+    if not (0 <= hour <= 23 and 0 <= minute <= 59):
+        raise SchedulerConfigError(f"{field_name} must be between 00:00 and 23:59")
+    return f'{hour:02d}:{minute:02d}'
+
+
+def _seconds_until_daily_time(daily_time: str, now: datetime.datetime | None = None) -> int:
+    current = now or datetime.datetime.now().astimezone()
+    hour_text, minute_text = daily_time.split(':', 1)
+    target = current.replace(
+        hour=int(hour_text),
+        minute=int(minute_text),
+        second=0,
+        microsecond=0,
+    )
+    if target <= current:
+        target += datetime.timedelta(days=1)
+    return max(1, int((target - current).total_seconds()))
+
+
+def _should_create_default_config(env: Mapping[str, str]) -> bool:
+    value = _env_value(env, 'CS_DEMO_CREATE_DEFAULT_CONFIG', 'CS_DEMO_DOCKER_AUTO_CONFIG')
+    if value is None:
+        return False
+    return _parse_bool(value, 'CS_DEMO_CREATE_DEFAULT_CONFIG')
+
+
+def _ensure_default_config(config_path: str | None, env: Mapping[str, str]) -> str | None:
+    if not _should_create_default_config(env):
+        return config_path
+
+    target_path = config_path or '/config/config.jsonc'
+    if os.path.exists(target_path):
+        return target_path
+
+    write_default_docker_config(target_path)
+    log_info(f'Created default Docker config at {target_path}. Edit the mounted config file with your account settings.')
+    return target_path
+
+
+def _resolve_daily_time(
+    cli_daily_time: str | None,
+    env: Mapping[str, str],
+    config: Config,
+) -> str | None:
+    if cli_daily_time is not None:
+        return _parse_daily_time(cli_daily_time, 'daily_time')
+
+    env_daily_time = _env_value(env, 'CS_DEMO_SCHEDULE_DAILY_TIME')
+    if env_daily_time is not None:
+        return _parse_daily_time(env_daily_time, 'CS_DEMO_SCHEDULE_DAILY_TIME')
+
+    return _parse_daily_time(_scheduler_value(config, 'daily_time'), 'scheduler.daily_time')
+
+
+def _next_wait_seconds(settings: SchedulerSettings) -> int:
+    if settings.daily_time:
+        return _seconds_until_daily_time(settings.daily_time)
+    return settings.interval_seconds
+
+
+def _schedule_description(settings: SchedulerSettings) -> str:
+    if settings.daily_time:
+        return f'daily at {settings.daily_time}'
+    return f'every {settings.interval_seconds} seconds'
 
 
 def _env_value(env: Mapping[str, str], *names: str) -> str | None:
@@ -559,6 +661,7 @@ def resolve_scheduler_settings(
     platforms: str | None = None,
     enabled: bool | None = None,
     interval_seconds: int | None = None,
+    daily_time: str | None = None,
     run_on_start: bool | None = None,
     env: Mapping[str, str] | None = None,
     base_config: Config | None = None,
@@ -580,6 +683,7 @@ def resolve_scheduler_settings(
         return SchedulerSettings(
             enabled=False,
             interval_seconds=86400,
+            daily_time=_parse_daily_time(_env_value(env_map, 'CS_DEMO_SCHEDULE_DAILY_TIME'), 'CS_DEMO_SCHEDULE_DAILY_TIME'),
             run_on_start=False,
             config_path=config_path or _env_value(env_map, 'CS_DEMO_SCHEDULE_CONFIG'),
             output_path=output_path or _env_value(env_map, 'CS_DEMO_SCHEDULE_OUTPUT'),
@@ -588,6 +692,8 @@ def resolve_scheduler_settings(
 
     env_config_path = _env_value(env_map, 'CS_DEMO_SCHEDULE_CONFIG')
     schedule_config_path = config_path or env_config_path
+    if base_config is None:
+        schedule_config_path = _ensure_default_config(schedule_config_path, env_map)
     config = base_config if base_config is not None else load_config(schedule_config_path)
 
     resolved_config_path = config_path or env_config_path or str(_scheduler_value(config, 'config') or '') or None
@@ -625,6 +731,7 @@ def resolve_scheduler_settings(
     return SchedulerSettings(
         enabled=resolved_enabled,
         interval_seconds=_resolve_interval_seconds(interval_seconds, env_map, config),
+        daily_time=_resolve_daily_time(daily_time, env_map, config),
         run_on_start=resolved_run_on_start,
         config_path=resolved_config_path,
         output_path=resolved_output_path,
@@ -635,7 +742,7 @@ def resolve_scheduler_settings(
 def _install_signal_handlers(stop_event: threading.Event):
     def handle_shutdown(signum: int, _frame: FrameType | None):
         signal_name = signal.Signals(signum).name
-        print(f"Received {signal_name}, stopping scheduler.")
+        log_info(f'Received {signal_name}, stopping scheduler.')
         stop_event.set()
 
     for signal_name in ('SIGINT', 'SIGTERM'):
@@ -654,7 +761,7 @@ def _run_scheduled_download(settings: SchedulerSettings) -> int:
     try:
         config = load_config(settings.config_path)
     except ConfigLoadError as e:
-        print(e, file=sys.stderr)
+        log_error(str(e))
         return 1
     return run_download(config, output_path=settings.output_path, platforms=platform_list)
 
@@ -665,6 +772,7 @@ def run_schedule_command(
     platforms: str | None = None,
     enabled: bool | None = None,
     interval_seconds: int | None = None,
+    daily_time: str | None = None,
     run_on_start: bool | None = None,
     env: Mapping[str, str] | None = None,
     stop_event: threading.Event | None = None,
@@ -678,19 +786,20 @@ def run_schedule_command(
             platforms=platforms,
             enabled=enabled,
             interval_seconds=interval_seconds,
+            daily_time=daily_time,
             run_on_start=run_on_start,
             env=env,
         )
     except (ConfigLoadError, SchedulerConfigError) as e:
-        print(e, file=sys.stderr)
+        log_error(str(e))
         return 1
 
     event = stop_event or threading.Event()
 
     if not settings.enabled:
-        print(
-            "Scheduler disabled. Container is idle. "
-            "Set CS_DEMO_SCHEDULE_ENABLED=true or scheduler.enabled=true to enable automatic downloads."
+        log_info(
+            'Scheduler disabled. Container is idle. '
+            'Set CS_DEMO_SCHEDULE_ENABLED=true or scheduler.enabled=true to enable automatic downloads.'
         )
         if run_once:
             return 0
@@ -702,23 +811,27 @@ def run_schedule_command(
     if install_signal_handlers:
         _install_signal_handlers(event)
 
-    print(
-        "Scheduler enabled: interval_seconds="
-        f"{settings.interval_seconds}, run_on_start={settings.run_on_start}, "
+    log_info(
+        'Scheduler enabled: '
+        f"mode={_schedule_description(settings)}, run_on_start={settings.run_on_start}, "
         f"platforms={','.join(_platform_list(settings.platforms) or list(VALID_PLATFORMS))}."
     )
 
     if settings.run_on_start:
-        print('Running scheduled download immediately on startup.')
+        log_info('Running scheduled download immediately on startup.')
         exit_code = _run_scheduled_download(settings)
         if run_once:
             return exit_code
         if exit_code != 0:
             return exit_code
     else:
-        print('Run-on-start disabled. First download will wait for the next interval.')
+        log_info('Run-on-start disabled. First download will wait for the next schedule.')
 
-    while not event.wait(settings.interval_seconds):
+    while True:
+        wait_seconds = _next_wait_seconds(settings)
+        log_info(f'Next scheduled download in {wait_seconds} seconds ({_schedule_description(settings)}).')
+        if event.wait(wait_seconds):
+            break
         exit_code = _run_scheduled_download(settings)
         if run_once:
             return exit_code
@@ -735,6 +848,7 @@ def load_scheduler_settings(args: argparse.Namespace) -> SchedulerSettings:
         platforms=getattr(args, 'platforms', None),
         enabled=getattr(args, 'enabled', None),
         interval_seconds=getattr(args, 'interval_seconds', None),
+        daily_time=getattr(args, 'daily_time', None),
         run_on_start=getattr(args, 'run_on_start', None),
     )
 
@@ -746,6 +860,7 @@ def run_scheduler(args: argparse.Namespace) -> int:
         platforms=getattr(args, 'platforms', None),
         enabled=getattr(args, 'enabled', None),
         interval_seconds=getattr(args, 'interval_seconds', None),
+        daily_time=getattr(args, 'daily_time', None),
         run_on_start=getattr(args, 'run_on_start', None),
     )
 
@@ -795,6 +910,10 @@ def main(argv: list[str] | None = None):
     schedule_parser.add_argument(
         '--interval-seconds', type=int,
         help='定时下载间隔秒数；也可使用 CS_DEMO_SCHEDULE_INTERVAL_SECONDS'
+    )
+    schedule_parser.add_argument(
+        '--daily-time', type=str,
+        help='每天运行时间，格式 HH:MM；也可使用 CS_DEMO_SCHEDULE_DAILY_TIME'
     )
     schedule_parser.add_argument(
         '--run-on-start', action='store_true', default=None,
@@ -864,6 +983,7 @@ def main(argv: list[str] | None = None):
             platforms=args.platforms,
             enabled=args.enabled,
             interval_seconds=args.interval_seconds,
+            daily_time=args.daily_time,
             run_on_start=args.run_on_start,
         )
     if args.command == 'metadata':
@@ -884,10 +1004,10 @@ def main(argv: list[str] | None = None):
                 force=args.force,
             )
         except PvpAliveUpdateError as e:
-            print(f"Error updating PvpAlive.dll: {e}", file=sys.stderr)
+            log_error(f'Error updating PvpAlive.dll: {e}')
             return 1
 
-        print(f"Updated PvpAlive.dll: {dll_path}")
+        log_info(f'Updated PvpAlive.dll: {dll_path}')
         return 0
 
     parser.print_help()

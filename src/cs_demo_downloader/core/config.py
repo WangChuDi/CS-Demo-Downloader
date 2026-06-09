@@ -6,6 +6,8 @@ import json
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, field
 
+from .logging import log_error
+
 
 class ConfigLoadError(Exception):
     """配置文件加载失败"""
@@ -122,6 +124,56 @@ class Config:
         """删除 Steam 官匹用户"""
         if 0 <= index < len(self.users_steam):
             self.users_steam.pop(index)
+
+
+def default_docker_config_data() -> Dict[str, Any]:
+    """Return the generated Docker config used for first-run containers."""
+    return {
+        'download_path': '/demos',
+        'save_metadata_with_demo': True,
+        'scheduler': {
+            'enabled': True,
+            'daily_time': '08:00',
+            'run_on_start': False,
+            'platforms': 'all',
+            'config': '/config/config.jsonc',
+            'output': '/demos',
+        },
+        'five_e': {'users': []},
+        'pwa': {
+            'default_access_token': '',
+            'signature_provider': 'compiled',
+            'pvp_alive_dll': '/cache/PvpAlive.dll',
+            'pvp_alive_bridge_exe': '',
+            'pvp_alive_wine_executable': 'wine',
+            'pvp_alive_timeout': '10',
+            'pwa_response_decryptor_exe': '',
+            'pwa_response_decryptor_timeout': '10',
+            'users': [],
+        },
+        'steam': {
+            'users': [],
+            'resolver': {},
+            'gc': {
+                'username_env': 'STEAM_GC_USERNAME',
+                'password_env': 'STEAM_GC_PASSWORD',
+                'two_factor_secret_env': 'STEAM_GC_TWO_FACTOR_SECRET',
+                'auth_code_env': 'STEAM_GC_AUTH_CODE',
+                'sentry_dir': '',
+                'timeout': '30',
+            },
+        },
+    }
+
+
+def write_default_docker_config(config_path: str) -> None:
+    """Create the default Docker config if a mounted config directory is empty."""
+    config_dir = os.path.dirname(config_path)
+    if config_dir:
+        os.makedirs(config_dir, exist_ok=True)
+    with open(config_path, 'w', encoding='utf-8') as config_file:
+        json.dump(default_docker_config_data(), config_file, indent=2, ensure_ascii=False)
+        config_file.write('\n')
 
 
 def get_config_path() -> str:
@@ -263,7 +315,7 @@ def load_config(config_path: Optional[str] = None) -> Config:
             message = f"Error loading config '{config_path}': {e}"
             if explicit_path:
                 raise ConfigLoadError(message) from e
-            print(message)
+            log_error(message)
     elif explicit_path:
         raise ConfigLoadError(f"Config file not found: {config_path}")
 
@@ -302,4 +354,4 @@ def save_config(config: Config, config_path: Optional[str] = None):
             }
             json.dump(data, f, indent=2, ensure_ascii=False)
     except IOError as e:
-        print(f"Error saving config: {e}")
+        log_error(f"Error saving config: {e}")

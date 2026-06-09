@@ -4,6 +4,20 @@
 
 [English README](README.md) · [中文详细使用 Wiki](https://github.com/WangChuDi/CS-Demo-Downloader/wiki/使用指南)
 
+## 目录
+
+- [pip 快速开始](#pip-快速开始)
+  - [Python API 快速开始](#python-api-快速开始)
+- [Docker 快速开始](#docker-快速开始)
+- [配置](#配置)
+- [平台凭据](#平台凭据)
+  - [5E](#5e)
+  - [完美世界电竞 / PWA](#完美世界电竞--pwa)
+  - [Steam 官匹](#steam-官匹)
+- [Metadata](#metadata)
+- [更多文档](#更多文档)
+- [许可证](#许可证)
+
 ## pip 快速开始
 
 完整 pip 安装和 CLI 说明：[Wiki 安装说明](https://github.com/WangChuDi/CS-Demo-Downloader/wiki/使用指南#2-安装) 与 [Wiki CLI 说明](https://github.com/WangChuDi/CS-Demo-Downloader/wiki/使用指南#5-cli-使用)。

@@ -4,6 +4,20 @@ Download Counter-Strike demos from 5EPlay, Perfect World Arena, and Steam offici
 
 [中文文档](README_CN.md) · [Detailed usage wiki](https://github.com/WangChuDi/CS-Demo-Downloader/wiki/Usage-Guide)
 
+## Table of contents
+
+- [Quick start with pip](#quick-start-with-pip)
+  - [Python API quick start](#python-api-quick-start)
+- [Quick start with Docker](#quick-start-with-docker)
+- [Configuration](#configuration)
+- [Platform credentials](#platform-credentials)
+  - [5EPlay](#5eplay)
+  - [Perfect World Arena / PWA](#perfect-world-arena--pwa)
+  - [Steam official matchmaking](#steam-official-matchmaking)
+- [Metadata](#metadata)
+- [More documentation](#more-documentation)
+- [License](#license)
+
 ## Quick start with pip
 
 Full pip install and CLI details: [wiki install guide](https://github.com/WangChuDi/CS-Demo-Downloader/wiki/Usage-Guide#2-install) and [wiki CLI guide](https://github.com/WangChuDi/CS-Demo-Downloader/wiki/Usage-Guide#5-cli-usage).

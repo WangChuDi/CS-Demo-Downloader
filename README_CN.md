@@ -52,7 +52,7 @@ from cs_demo_downloader.core.downloader_5e import get_all_demo_urls
 demo_urls = get_all_demo_urls("YOUR_5E_USERID")
 ```
 
-PWA Demo URL 需要 signed URL 和 PWA 下载请求头。生成的 URL 包含 `access_token`，不要打印或持久化保存。
+PWA Demo URL 需要 signed URL 和 PWA 下载请求头。生成的 URL 包含 `access_token`，并会原样返回。
 
 ```python
 from cs_demo_downloader.core.downloader_pwa import build_download_headers, get_all_demo_urls
@@ -71,7 +71,7 @@ from cs_demo_downloader.core.downloader_5e import get_all_demo_metadata as get_5
 from cs_demo_downloader.core.metadata import metadata_list_to_dicts
 
 matches = get_5e_metadata("YOUR_5E_USERID", limit=10)
-payload = metadata_list_to_dicts(matches, redact_sensitive_urls=True, include_raw=False)
+payload = metadata_list_to_dicts(matches, include_raw=False)
 ```
 
 ## Docker 快速开始

@@ -5,9 +5,6 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Union
 
-from .utils import redact_url
-
-
 JSONValue = Union[None, bool, int, float, str, List["JSONValue"], Dict[str, "JSONValue"]]
 JSONObject = Dict[str, JSONValue]
 METADATA_SCHEMA_VERSION = "1.1"
@@ -29,7 +26,7 @@ class MatchTeam:
     half_scores: Dict[str, int] = field(default_factory=dict)
     raw: JSONObject = field(default_factory=dict)
 
-    def to_dict(self, redact_sensitive_urls: bool = False) -> JSONObject:
+    def to_dict(self) -> JSONObject:
         return {
             "name": self.name,
             "team_id": self.team_id,
@@ -41,7 +38,7 @@ class MatchTeam:
             "origin_elo": self.origin_elo,
             "change_elo": self.change_elo,
             "half_scores": dict(self.half_scores),
-            "raw": _redact_json(self.raw) if redact_sensitive_urls else dict(self.raw),
+            "raw": dict(self.raw),
         }
 
 
@@ -82,12 +79,12 @@ class MatchPlayer:
     platform_stats: JSONObject = field(default_factory=dict)
     raw: JSONObject = field(default_factory=dict)
 
-    def to_dict(self, redact_sensitive_urls: bool = False) -> JSONObject:
+    def to_dict(self) -> JSONObject:
         return {
             "player_id": self.player_id,
             "steam_id": self.steam_id,
             "name": self.name,
-            "profile": _redact_json(self.profile) if redact_sensitive_urls else dict(self.profile),
+            "profile": dict(self.profile),
             "team_index": self.team_index,
             "side": self.side,
             "ladder_stats": dict(self.ladder_stats),
@@ -114,8 +111,8 @@ class MatchPlayer:
             "utility_stats": dict(self.utility_stats),
             "impact_stats": dict(self.impact_stats),
             "award_flags": dict(self.award_flags),
-            "platform_stats": _redact_json(self.platform_stats) if redact_sensitive_urls else dict(self.platform_stats),
-            "raw": _redact_json(self.raw) if redact_sensitive_urls else dict(self.raw),
+            "platform_stats": dict(self.platform_stats),
+            "raw": dict(self.raw),
         }
 
 
@@ -157,9 +154,9 @@ class MatchMetadata:
             if duration >= 0:
                 self.duration_seconds = duration
 
-    def to_dict(self, redact_sensitive_urls: bool = False) -> JSONObject:
-        demo_url = redact_url(self.demo_url) if redact_sensitive_urls and self.demo_url else self.demo_url
-        demo = _metadata_demo_payload(self, demo_url, redact_sensitive_urls)
+    def to_dict(self) -> JSONObject:
+        demo_url = self.demo_url
+        demo = _metadata_demo_payload(self, demo_url)
         return {
             "schema_version": self.schema_version,
             "exported_at": self.exported_at,
@@ -179,28 +176,27 @@ class MatchMetadata:
             "started_at": self.started_at,
             "ended_at": self.ended_at,
             "duration_seconds": self.duration_seconds,
-            "teams": [team.to_dict(redact_sensitive_urls) for team in self.teams],
-            "players": [player.to_dict(redact_sensitive_urls) for player in self.players],
+            "teams": [team.to_dict() for team in self.teams],
+            "players": [player.to_dict() for player in self.players],
             "match_awards": dict(self.match_awards),
-            "demo_info": _redact_json(self.demo_info) if redact_sensitive_urls else dict(self.demo_info),
-            "round_results": [_redact_json(item) for item in self.round_results] if redact_sensitive_urls else [dict(item) for item in self.round_results],
-            "rounds": [_redact_json(item) for item in self.rounds] if redact_sensitive_urls else [dict(item) for item in self.rounds],
-            "platform_match": _redact_json(self.platform_match) if redact_sensitive_urls else dict(self.platform_match),
-            "raw_summary": _redact_json(self.raw_summary) if redact_sensitive_urls else dict(self.raw_summary),
-            "raw_detail": _redact_json(self.raw_detail) if redact_sensitive_urls else dict(self.raw_detail),
+            "demo_info": dict(self.demo_info),
+            "round_results": [dict(item) for item in self.round_results],
+            "rounds": [dict(item) for item in self.rounds],
+            "platform_match": dict(self.platform_match),
+            "raw_summary": dict(self.raw_summary),
+            "raw_detail": dict(self.raw_detail),
         }
 
 
 def metadata_list_to_dicts(
     matches: List[MatchMetadata],
-    redact_sensitive_urls: bool = False,
     include_raw: bool = True,
 ) -> List[JSONObject]:
     """Serialize metadata objects for API/CLI output."""
     output: List[JSONObject] = []
     exported_at = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
     for match in matches:
-        item = match.to_dict(redact_sensitive_urls=redact_sensitive_urls)
+        item = match.to_dict()
         if item.get("exported_at") is None:
             item["exported_at"] = exported_at
         if not include_raw:
@@ -220,15 +216,12 @@ def metadata_list_to_dicts(
     return output
 
 
-def _metadata_demo_payload(match: MatchMetadata, demo_url: Optional[str], redact_sensitive_urls: bool) -> JSONObject:
+def _metadata_demo_payload(match: MatchMetadata, demo_url: Optional[str]) -> JSONObject:
     demo: JSONObject = dict(match.demo)
     demo.setdefault("url", demo_url)
     demo.setdefault("available", match.demo_available)
     if match.demo_info:
-        demo.setdefault("info", _redact_json(match.demo_info) if redact_sensitive_urls else dict(match.demo_info))
-    if redact_sensitive_urls:
-        redacted = _redact_json(demo)
-        return redacted if isinstance(redacted, dict) else {}
+        demo.setdefault("info", dict(match.demo_info))
     return demo
 
 
@@ -278,15 +271,3 @@ def optional_float(value: object) -> Optional[float]:
         return float(str(value).strip())
     except ValueError:
         return None
-
-
-def _redact_json(value: JSONValue) -> JSONValue:
-    if isinstance(value, str):
-        if value.startswith("http://") or value.startswith("https://"):
-            return redact_url(value)
-        return value
-    if isinstance(value, list):
-        return [_redact_json(item) for item in value]
-    if isinstance(value, dict):
-        return {key: _redact_json(item) for key, item in value.items()}
-    return value

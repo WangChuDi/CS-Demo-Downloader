@@ -222,7 +222,7 @@ def write_demo_metadata(match: MatchMetadata, demo_path: str) -> str | None:
     if not match.demo_url:
         return None
     metadata_path = metadata_path_for_demo_url(match.demo_url, demo_path)
-    payload = metadata_list_to_dicts([match], redact_sensitive_urls=True, include_raw=False)[0]
+    payload = metadata_list_to_dicts([match], include_raw=False)[0]
     try:
         os.makedirs(os.path.dirname(metadata_path), exist_ok=True)
         with open(metadata_path, 'w', encoding='utf-8') as metadata_file:
@@ -399,7 +399,6 @@ def run_metadata(
     limit: int = 20,
     pretty: bool = False,
     include_raw: bool = False,
-    redact_sensitive_urls: bool = True,
 ) -> int:
     selected_platforms = list(METADATA_PLATFORMS) if all_platforms or platform is None else [platform]
     matches: list[MatchMetadata] = []
@@ -412,7 +411,6 @@ def run_metadata(
 
     payload = metadata_list_to_dicts(
         matches,
-        redact_sensitive_urls=redact_sensitive_urls,
         include_raw=include_raw,
     )
     indent = 2 if pretty else None
@@ -441,7 +439,6 @@ def run_metadata_command(
         limit=limit,
         pretty=pretty,
         include_raw=include_raw,
-        redact_sensitive_urls=True,
     )
 
 
@@ -827,7 +824,7 @@ def main(argv: list[str] | None = None):
     )
     metadata_parser.add_argument(
         '--include-raw', action='store_true',
-        help='在 JSON 输出中包含平台原始字段；URL 仍会脱敏'
+        help='在 JSON 输出中包含平台原始字段'
     )
 
     pvp_alive_parser = subparsers.add_parser(

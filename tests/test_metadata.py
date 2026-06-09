@@ -68,7 +68,7 @@ class MetadataModelTests(unittest.TestCase):
         self.assertEqual('1.1', match.schema_version)
         self.assertEqual([], match.rounds)
 
-    def test_metadata_serialization_redacts_sensitive_urls_in_raw_fields(self):
+    def test_metadata_serialization_preserves_urls_in_raw_fields(self):
         match = MatchMetadata(
             platform='pwa',
             match_id='match-1',
@@ -80,12 +80,11 @@ class MetadataModelTests(unittest.TestCase):
             },
         )
 
-        payload = metadata_list_to_dicts([match], redact_sensitive_urls=True, include_raw=True)
+        payload = metadata_list_to_dicts([match], include_raw=True)
         encoded = json.dumps(payload)
 
-        self.assertNotIn('secret', encoded)
-        self.assertNotIn('sig', encoded)
-        self.assertIn('access_token=%3Credacted%3E', encoded)
+        self.assertIn('access_token=secret', encoded)
+        self.assertIn('s=sig', encoded)
 
     def test_metadata_serialization_can_omit_raw_fields(self):
         match = MatchMetadata(platform='5e', match_id='match-1', raw_summary={'map': 'de_inferno'})
@@ -105,7 +104,7 @@ class MetadataModelTests(unittest.TestCase):
             ended_at=160,
         )
 
-        payload = metadata_list_to_dicts([match], redact_sensitive_urls=True, include_raw=False)
+        payload = metadata_list_to_dicts([match], include_raw=False)
 
         item = payload[0]
         self.assertEqual('1.1', item['schema_version'])
@@ -120,7 +119,7 @@ class MetadataModelTests(unittest.TestCase):
         self.assertIsInstance(demo_url, str)
         if not isinstance(demo_url, str):
             self.fail('expected demo url')
-        self.assertIn('access_token=%3Credacted%3E', demo_url)
+        self.assertIn('access_token=secret', demo_url)
         self.assertEqual(item['demo_url'], demo['url'])
 
 
@@ -492,7 +491,7 @@ class PwaMetadataTests(unittest.TestCase):
         self.assertEqual({'is_mvp': True}, match.players[0].award_flags)
         self.assertEqual('0.47', match.players[0].platform_stats['actual_accuracy'])
         self.assertEqual({'ak47': 5}, match.players[0].platform_stats['weapon_cause_damage_type_count'])
-        self.assertNotIn('cellphone', match.players[0].platform_stats)
+        self.assertEqual('sensitive-phone', match.players[0].platform_stats['cellphone'])
         self.assertEqual('pwa-player-two', match.players[1].name)
         self.assertEqual(18, match.players[1].kills)
         self.assertIn('perfect_moment', match.raw_detail)
@@ -574,7 +573,7 @@ class PwaMetadataTests(unittest.TestCase):
 
 
 class MetadataCliTests(unittest.TestCase):
-    def test_write_demo_metadata_saves_redacted_json_next_to_demo(self):
+    def test_write_demo_metadata_saves_full_json_next_to_demo(self):
         match = MatchMetadata(
             platform='pwa',
             match_id='match-1',
@@ -593,12 +592,11 @@ class MetadataCliTests(unittest.TestCase):
 
         encoded = json.dumps(payload)
         self.assertEqual('match-1', payload['match_id'])
-        self.assertNotIn('secret-token', encoded)
-        self.assertNotIn('secret-signature', encoded)
-        self.assertIn('access_token=%3Credacted%3E', encoded)
+        self.assertIn('secret-token', encoded)
+        self.assertIn('secret-signature', encoded)
         self.assertNotIn('raw_detail', payload)
 
-    def test_run_metadata_outputs_redacted_json(self):
+    def test_run_metadata_outputs_full_json(self):
         config = Config()
         config.add_user_pwa('pwa-user', 'steamid', 'token')
         stdout = io.StringIO()
@@ -615,9 +613,8 @@ class MetadataCliTests(unittest.TestCase):
 
         self.assertEqual(0, exit_code)
         output = stdout.getvalue()
-        self.assertNotIn('secret-token', output)
-        self.assertNotIn('secret-signature', output)
-        self.assertIn('access_token=%3Credacted%3E', output)
+        self.assertIn('secret-token', output)
+        self.assertIn('secret-signature', output)
         payload = json.loads(output)
         self.assertEqual('match-1', payload[0]['match_id'])
 

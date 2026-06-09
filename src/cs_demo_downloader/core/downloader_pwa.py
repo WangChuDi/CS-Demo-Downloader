@@ -1208,19 +1208,9 @@ def _pwa_player_profile(row: Mapping[str, object]) -> dict[str, JSONValue]:
 
 
 def _pwa_player_platform_stats(row: Mapping[str, object]) -> dict[str, JSONValue]:
-    sensitive_keys = {
-        'access_token',
-        'cellphone',
-        'currentLoginIp',
-        'lastLoginIp',
-        'real_name_valid',
-        'real_name_valid_type',
-    }
     stats: dict[str, JSONValue] = {}
     for key, value in row.items():
         normalized_key = str(key)
-        if normalized_key in sensitive_keys:
-            continue
         stats[normalized_key] = to_json_value(value)
     return stats
 

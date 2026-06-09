@@ -14,6 +14,7 @@ from pathlib import Path
 from packaging import tags
 from typing import Protocol, cast
 
+from .logging import log_error
 from .metadata import JSONValue, MatchMetadata, MatchPlayer, MatchTeam, json_object, optional_float, optional_int, optional_str, to_json_value
 
 
@@ -111,7 +112,7 @@ def decrypt_pwa_et_payload(
         if decryptor is not None:
             decrypted = decryptor(encrypted, token)
     except PwaDecryptorUnavailableError as exc:
-        print(f'PWA e/t decryptor unavailable: {exc}')
+        log_error(f'PWA e/t decryptor unavailable: {exc}')
         return None
 
     if decrypted is None:
@@ -119,14 +120,14 @@ def decrypt_pwa_et_payload(
             decrypted = _load_compiled_signer().decrypt_pwa_response(encrypted, token)
         except (PwaSignerUnavailableError, AttributeError, ValueError) as exc:
             if not decryptor_exe:
-                print(f'PWA e/t decryptor unavailable: {exc}')
+                log_error(f'PWA e/t decryptor unavailable: {exc}')
                 return None
 
     if decrypted is None and decryptor_exe:
         try:
             decrypted = call_pwa_et_decryptor_exe(encrypted, token, decryptor_exe, timeout=decryptor_timeout)
         except PwaDecryptorUnavailableError as exc:
-            print(f'PWA e/t decryptor unavailable: {exc}')
+            log_error(f'PWA e/t decryptor unavailable: {exc}')
             return None
 
     if decrypted is None:
@@ -135,7 +136,7 @@ def decrypt_pwa_et_payload(
         try:
             return cast(object, json.loads(decrypted))
         except json.JSONDecodeError as exc:
-            print(f'PWA e/t decryptor returned invalid JSON: {exc}')
+            log_error(f'PWA e/t decryptor returned invalid JSON: {exc}')
             return None
     return decrypted
 
@@ -448,7 +449,7 @@ def _get_recent_ladder_records(
         
         return []
     except requests.RequestException as e:
-        print(f"Error getting PWA match list: {e}")
+        log_error(f"Error getting PWA match list: {e}")
         return []
 
 
@@ -482,7 +483,7 @@ def _get_user_match_list_records(
     try:
         response = requests.get(PWA_USER_MATCH_LIST_URL, params=params, headers=headers, timeout=10)
     except requests.RequestException as e:
-        print(f"Error getting PWA encrypted match list for season {season}: {e}")
+        log_error(f"Error getting PWA encrypted match list for season {season}: {e}")
         return []
     if response.status_code != 200:
         return []
@@ -565,7 +566,7 @@ def get_current_season(steamid: str, access_token: str, acw_tc: str | None = Non
     try:
         response = requests.post(PWA_USER_INFO_URL, headers=headers, timeout=10)
     except requests.RequestException as e:
-        print(f"Error getting PWA user info: {e}")
+        log_error(f"Error getting PWA user info: {e}")
         return None
     if response.status_code != 200:
         return None
@@ -595,7 +596,7 @@ def get_season_ladder_records(
     try:
         response = requests.get(PWA_SEASON_LADDER_SCORE_LIST_URL, params=params, headers=headers, timeout=10)
     except requests.RequestException as e:
-        print(f"Error getting PWA season ladder list: {e}")
+        log_error(f"Error getting PWA season ladder list: {e}")
         return []
     if response.status_code != 200:
         return []
@@ -750,7 +751,7 @@ def fetch_match_report(match_id: str, steamid: str, access_token: str) -> Mappin
     try:
         response = requests.post(PWA_MATCH_REPORT_URL, json=payload, headers=headers, timeout=10)
     except requests.RequestException as e:
-        print(f"Error getting PWA match report for match {match_id}: {e}")
+        log_error(f"Error getting PWA match report for match {match_id}: {e}")
         return None
 
     if response.status_code != 200:
@@ -770,7 +771,7 @@ def fetch_perfect_moment(match_id: str) -> Mapping[str, object] | None:
     try:
         response = requests.get(f'{PWA_PERFECT_MOMENT_URL_PREFIX}/{match_id}', timeout=10)
     except requests.RequestException as e:
-        print(f"Error getting PWA perfect moment for match {match_id}: {e}")
+        log_error(f"Error getting PWA perfect moment for match {match_id}: {e}")
         return None
 
     if response.status_code != 200:
@@ -798,7 +799,7 @@ def fetch_match_round_simple_list(match_id: str, steamid: str, access_token: str
     try:
         response = requests.post(PWA_MATCH_ROUND_SIMPLE_LIST_URL, json=payload, headers=headers, timeout=10)
     except requests.RequestException as e:
-        print(f"Error getting PWA round simple list for match {match_id}: {e}")
+        log_error(f"Error getting PWA round simple list for match {match_id}: {e}")
         return []
 
     if response.status_code != 200:

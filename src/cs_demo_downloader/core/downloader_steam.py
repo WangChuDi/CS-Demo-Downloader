@@ -6,6 +6,8 @@ from typing import Callable, Dict, Optional
 
 import requests
 
+from .logging import log_error, log_info
+
 
 SHARE_CODE_CHARS = "ABCDEFGHJKLMNOPQRSTUVWXYZabcdefhijkmnopqrstuvwxyz23456789"
 BITMASK64 = 2**64 - 1
@@ -56,13 +58,13 @@ def get_next_share_code(
     try:
         response = requests.get(GET_NEXT_MATCH_SHARING_CODE_URL, params=params, timeout=10)
         if response.status_code != 200:
-            print(f"Failed to get Steam share code, status: {response.status_code}")
+            log_error(f"Failed to get Steam share code, status: {response.status_code}")
             return None
 
         data = response.json()
         return data.get("result", {}).get("nextcode")
     except requests.RequestException as e:
-        print(f"Error getting Steam share code: {e}")
+        log_error(f"Error getting Steam share code: {e}")
         return None
 
 
@@ -83,13 +85,13 @@ def resolve_demo_url_from_share_code(
     try:
         decoded = decode_share_code(share_code)
     except ValueError as e:
-        print(f"Error decoding Steam share code: {e}")
+        log_error(f"Error decoding Steam share code: {e}")
         return None
 
     if demo_url_resolver is None:
-        print(
-            "Steam share code resolved, but Steam GC match-info resolver is not configured. "
-            "Cannot get a real replay URL from Web API data alone."
+        log_info(
+            'Steam share code resolved, but Steam GC match-info resolver is not configured. '
+            'Cannot get a real replay URL from Web API data alone.'
         )
         return None
 

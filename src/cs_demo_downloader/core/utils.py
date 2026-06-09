@@ -10,6 +10,8 @@ import requests
 from typing import Callable, Dict, Optional
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
+from .logging import log_error, log_info
+
 
 SENSITIVE_QUERY_KEYS = {
     'access_token',
@@ -89,10 +91,10 @@ def download_file(
             # 检查响应类型
             content_type = r.headers.get('Content-Type', '')
             if 'text/html' in content_type:
-                print(f"Invalid response type: {content_type} for {redact_url(url)}")
+                log_error(f"Invalid response type: {content_type} for {redact_url(url)}")
                 return None
             if 'application/json' in content_type:
-                print(f"Invalid response type: {content_type} for {redact_url(url)}")
+                log_error(f"Invalid response type: {content_type} for {redact_url(url)}")
                 return None
             
             total_size = int(r.headers.get('content-length', 0))
@@ -110,10 +112,10 @@ def download_file(
         return local_path
     
     except requests.RequestException as e:
-        print(f"Download error for {redact_url(url)}: {type(e).__name__}")
+        log_error(f"Download error for {redact_url(url)}: {type(e).__name__}")
         return None
     except OSError as e:
-        print(f"File write error for '{local_path}': {e}")
+        log_error(f"File write error for '{local_path}': {e}")
         return None
 
 
@@ -141,7 +143,7 @@ def unzip_file(zip_path: str, extract_path: str) -> bool:
                 target_path = os.path.abspath(os.path.join(extract_root, normalized_name))
 
                 if not is_within_extract_root(target_path):
-                    print(f"Unsafe zip entry detected: {member.filename}")
+                    log_error(f"Unsafe zip entry detected: {member.filename}")
                     return False
 
             for member in zip_ref.infolist():
@@ -157,10 +159,10 @@ def unzip_file(zip_path: str, extract_path: str) -> bool:
                     target.write(source.read())
         return True
     except zipfile.BadZipFile as e:
-        print(f"Bad zip file: {e}")
+        log_error(f"Bad zip file: {e}")
         return False
     except Exception as e:
-        print(f"Unzip error: {e}")
+        log_error(f"Unzip error: {e}")
         return False
 
 
@@ -172,7 +174,7 @@ def extract_bz2_file(bz2_path: str, dem_path: str) -> bool:
             target.write(source.read())
         return True
     except OSError as e:
-        print(f"BZ2 extract error: {e}")
+        log_error(f"BZ2 extract error: {e}")
         return False
 
 
@@ -206,7 +208,7 @@ def download_and_extract(
         成功返回 True，失败返回 False
     """
     if not url:
-        print("URL is empty, skipping.")
+        log_error('URL is empty, skipping.')
         return False
     
     # 从 URL 提取文件名
@@ -216,7 +218,7 @@ def download_and_extract(
     dem_filename = get_demo_filename_from_url(url)
     dem_path = os.path.join(demo_path, dem_filename)
     if os.path.exists(dem_path):
-        print(f"File {dem_filename} already exists, skipping.")
+        log_info(f'File {dem_filename} already exists, skipping.')
         return True
     
     archive_path = os.path.join(demo_path, filename)
@@ -237,7 +239,7 @@ def download_and_extract(
             os.remove(archive_path)
         except OSError:
             pass
-        print(f"Downloaded and extracted to {demo_path}")
+        log_info(f'Downloaded and extracted to {demo_path}')
         return True
 
     return False

@@ -5,6 +5,7 @@ import requests
 from typing import Optional, List, Dict
 from collections.abc import Mapping
 
+from .logging import log_error
 from .metadata import JSONValue, MatchMetadata, MatchPlayer, MatchTeam, json_object, optional_float, optional_int, optional_str
 from .utils import get_end_of_day_timestamp, get_timestamp_days_ago
 
@@ -42,10 +43,10 @@ def get_uuid(userid: str) -> Optional[str]:
             uuid = data.get('data', {}).get('uuid')
             return uuid
         else:
-            print(f"Failed to get uuid, status: {response.status_code}")
+            log_error(f"Failed to get uuid, status: {response.status_code}")
             return None
     except requests.RequestException as e:
-        print(f"Error getting uuid: {e}")
+        log_error(f"Error getting uuid: {e}")
         return None
 
 
@@ -115,7 +116,7 @@ def get_match_list_records(
 
         return []
     except requests.RequestException as e:
-        print(f"Error getting match list: {e}")
+        log_error(f"Error getting match list: {e}")
         return []
 
 
@@ -154,7 +155,7 @@ def get_match_detail(match_id: str) -> Dict[str, object]:
 
         return {}
     except requests.RequestException as e:
-        print(f"Error getting match detail for match {match_id}: {e}")
+        log_error(f"Error getting match detail for match {match_id}: {e}")
         return {}
 
 
@@ -192,7 +193,7 @@ def _get_optional_match_data(url: str, label: str, match_id: str) -> Dict[str, o
     try:
         response = requests.get(url, headers=HEADERS, timeout=10)
     except requests.RequestException as e:
-        print(f"Error getting 5E {label} for match {match_id}: {e}")
+        log_error(f"Error getting 5E {label} for match {match_id}: {e}")
         return {}
 
     if response.status_code != 200:

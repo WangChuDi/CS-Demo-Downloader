@@ -350,29 +350,29 @@ class DownloadFileTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as temp_dir:
             local_path = os.path.join(temp_dir, 'demo.zip')
-            stdout = io.StringIO()
+            stderr = io.StringIO()
 
             with mock.patch('cs_demo_downloader.core.utils.requests.get', return_value=response):
                 with mock.patch('builtins.open', side_effect=OSError('permission denied')):
-                    with redirect_stdout(stdout):
+                    with redirect_stderr(stderr):
                         result = download_file('https://example.invalid/demo.zip', local_path)
 
         self.assertIsNone(result)
-        self.assertIn('File write error', stdout.getvalue())
-        self.assertIn(local_path, stdout.getvalue())
+        self.assertIn('File write error', stderr.getvalue())
+        self.assertIn(local_path, stderr.getvalue())
 
     def test_download_file_redacts_sensitive_url_on_request_error(self):
         sensitive_url = 'https://example.invalid/demo.dem?access_token=secret-token&s=secret-signature&match_id=1'
-        stdout = io.StringIO()
+        stderr = io.StringIO()
 
         with mock.patch('cs_demo_downloader.core.utils.requests.get', side_effect=requests.RequestException('boom')):
-            with redirect_stdout(stdout):
+            with redirect_stderr(stderr):
                 result = download_file(sensitive_url, '/tmp/demo.zip')
 
         self.assertIsNone(result)
-        self.assertNotIn('secret-token', stdout.getvalue())
-        self.assertNotIn('secret-signature', stdout.getvalue())
-        self.assertIn('access_token=%3Credacted%3E', stdout.getvalue())
+        self.assertNotIn('secret-token', stderr.getvalue())
+        self.assertNotIn('secret-signature', stderr.getvalue())
+        self.assertIn('access_token=%3Credacted%3E', stderr.getvalue())
 
     def test_download_file_redacts_sensitive_url_on_json_response(self):
         response = mock.MagicMock()
@@ -380,15 +380,15 @@ class DownloadFileTests(unittest.TestCase):
         response.headers = {'Content-Type': 'application/json'}
         response.raise_for_status.return_value = None
         sensitive_url = 'https://example.invalid/demo.dem?access_token=secret-token&match_id=1'
-        stdout = io.StringIO()
+        stderr = io.StringIO()
 
         with mock.patch('cs_demo_downloader.core.utils.requests.get', return_value=response):
-            with redirect_stdout(stdout):
+            with redirect_stderr(stderr):
                 result = download_file(sensitive_url, '/tmp/demo.zip')
 
         self.assertIsNone(result)
-        self.assertNotIn('secret-token', stdout.getvalue())
-        self.assertIn('access_token=%3Credacted%3E', stdout.getvalue())
+        self.assertNotIn('secret-token', stderr.getvalue())
+        self.assertIn('access_token=%3Credacted%3E', stderr.getvalue())
 
 
 class RedactUrlTests(unittest.TestCase):
@@ -430,13 +430,13 @@ class UnzipFileTests(unittest.TestCase):
             with zipfile.ZipFile(zip_path, 'w') as zip_file:
                 zip_file.writestr('../escape.dem', 'malicious-content')
 
-            stdout = io.StringIO()
-            with redirect_stdout(stdout):
+            stderr = io.StringIO()
+            with redirect_stderr(stderr):
                 result = unzip_file(zip_path, extract_path)
 
             self.assertFalse(result)
             self.assertFalse(os.path.exists(outside_file))
-            self.assertIn('Unsafe zip entry detected', stdout.getvalue())
+            self.assertIn('Unsafe zip entry detected', stderr.getvalue())
 
 
 class SteamDownloaderTests(unittest.TestCase):

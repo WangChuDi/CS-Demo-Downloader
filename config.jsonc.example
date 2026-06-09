@@ -9,6 +9,8 @@
     "enabled": "false",
     // Fixed interval between automatic downloads. Must be a positive integer.
     "interval_seconds": "86400",
+    // Optional daily run time in local container/system time. When set, this takes precedence over interval_seconds.
+    "daily_time": "08:00",
     // Set true to run one download immediately when the scheduler starts.
     "run_on_start": "false",
     // One of: "all", "5e", "pwa", "steam".

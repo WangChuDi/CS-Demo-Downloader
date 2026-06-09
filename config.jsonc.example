@@ -1,6 +1,8 @@
 {
   // Demo download directory. "." means the current working directory.
   "download_path": ".",
+  // Save normalized metadata next to each successfully downloaded demo.
+  "save_metadata_with_demo": false,
 
   "scheduler": {
     // Disabled by default. Used by `cs-demo-downloader schedule`.

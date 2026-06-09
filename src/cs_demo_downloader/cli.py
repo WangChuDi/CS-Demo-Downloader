@@ -23,7 +23,7 @@ from .core.downloader_pwa import get_all_demo_urls as get_pwa_demos
 from .core.downloader_pwa import get_all_demo_metadata as get_pwa_metadata
 from .core.downloader_steam import get_all_demo_urls as get_steam_demos
 from .core.metadata import MatchMetadata, metadata_list_to_dicts
-from .core.utils import download_and_extract, redact_url
+from .core.utils import download_and_extract, get_demo_filename_from_url, redact_url
 from .pwa_dll_updater import LATEST_YML_URL, PvpAliveUpdateError, update_cached_pvp_alive_dll
 
 
@@ -69,6 +69,22 @@ def download_5e_demos(config: Config):
 
     for user in users:
         print(f"\n=== Downloading 5E demos for {user.label} ===")
+        if config.save_metadata_with_demo:
+            metadata_matches = get_5e_metadata(user.userid)
+            if not metadata_matches:
+                print(f"No demos found for {user.label}")
+                continue
+
+            print(f"Found {len(metadata_matches)} demos")
+            for match in metadata_matches:
+                if not match.demo_url:
+                    continue
+                print(f"\nMatch {match.match_id}: {match.demo_url}")
+                if download_and_extract(match.demo_url, config.download_path, print_progress):
+                    write_demo_metadata(match, config.download_path)
+                print()
+            continue
+
         demo_urls = get_5e_demos(user.userid)
 
         if not demo_urls:
@@ -98,6 +114,32 @@ def download_pwa_demos(config: Config):
             print(f"Unable to configure PWA signer for {user.label}: {e}", file=sys.stderr)
             continue
         decryptor = build_pwa_et_decryptor(config)
+        if config.save_metadata_with_demo:
+            metadata_matches = get_pwa_metadata(
+                user.steamid,
+                user.access_token,
+                signer=signer,
+                et_decryptor=decryptor,
+            )
+            if not metadata_matches:
+                print(f"No demos found for {user.label}")
+                continue
+
+            print(f"Found {len(metadata_matches)} demos")
+            for match in metadata_matches:
+                if not match.demo_url:
+                    continue
+                print(f"\nMatch {match.match_id}: {redact_url(match.demo_url)}")
+                try:
+                    headers = build_pwa_download_headers(user.steamid)
+                except RuntimeError as e:
+                    print(f"Unable to build PWA download headers for {user.label}: {e}", file=sys.stderr)
+                    continue
+                if download_and_extract(match.demo_url, config.download_path, print_progress, headers=headers):
+                    write_demo_metadata(match, config.download_path)
+                print()
+            continue
+
         demo_urls = get_pwa_demos(user.steamid, user.access_token, signer=signer, et_decryptor=decryptor)
 
         if not demo_urls:
@@ -168,6 +210,29 @@ def build_pwa_demo_url_signer(config: Config) -> PwaDemoSigner | None:
         "Use 'compiled', 'pvp_alive_native', or 'pvp_alive_wine'."
     )
     raise RuntimeError(message)
+
+
+def metadata_path_for_demo_url(demo_url: str, demo_path: str) -> str:
+    demo_filename = get_demo_filename_from_url(demo_url)
+    base_name, _extension = os.path.splitext(demo_filename)
+    return os.path.join(demo_path, f'{base_name}.metadata.json')
+
+
+def write_demo_metadata(match: MatchMetadata, demo_path: str) -> str | None:
+    if not match.demo_url:
+        return None
+    metadata_path = metadata_path_for_demo_url(match.demo_url, demo_path)
+    payload = metadata_list_to_dicts([match], redact_sensitive_urls=True, include_raw=False)[0]
+    try:
+        os.makedirs(os.path.dirname(metadata_path), exist_ok=True)
+        with open(metadata_path, 'w', encoding='utf-8') as metadata_file:
+            json.dump(payload, metadata_file, ensure_ascii=False, indent=2)
+            metadata_file.write('\n')
+    except OSError as e:
+        print(f"Error writing metadata '{metadata_path}': {e}", file=sys.stderr)
+        return None
+    print(f"Metadata saved to {metadata_path}")
+    return metadata_path
 
 
 def build_pwa_et_decryptor(config: Config) -> PwaEtDecryptor | None:

@@ -1,5 +1,7 @@
 import io
 import json
+import os
+import tempfile
 import unittest
 from contextlib import redirect_stdout
 from unittest import mock
@@ -572,6 +574,30 @@ class PwaMetadataTests(unittest.TestCase):
 
 
 class MetadataCliTests(unittest.TestCase):
+    def test_write_demo_metadata_saves_redacted_json_next_to_demo(self):
+        match = MatchMetadata(
+            platform='pwa',
+            match_id='match-1',
+            demo_url='https://pwaweblogin.wmpvp.com/csgo/demo/match-1_0.dem?access_token=secret-token&s=secret-signature',
+            demo_available=True,
+            raw_detail={'demo_url': 'https://example.invalid/demo.dem?access_token=secret-token'},
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            metadata_path = cli.write_demo_metadata(match, temp_dir)
+
+            expected_path = os.path.join(temp_dir, 'match-1_0.metadata.json')
+            self.assertEqual(expected_path, metadata_path)
+            with open(expected_path, 'r', encoding='utf-8') as metadata_file:
+                payload = json.load(metadata_file)
+
+        encoded = json.dumps(payload)
+        self.assertEqual('match-1', payload['match_id'])
+        self.assertNotIn('secret-token', encoded)
+        self.assertNotIn('secret-signature', encoded)
+        self.assertIn('access_token=%3Credacted%3E', encoded)
+        self.assertNotIn('raw_detail', payload)
+
     def test_run_metadata_outputs_redacted_json(self):
         config = Config()
         config.add_user_pwa('pwa-user', 'steamid', 'token')

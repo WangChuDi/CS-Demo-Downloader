@@ -59,6 +59,7 @@ class Config:
     users_5e: List[Dict[str, str]] = field(default_factory=list)
     users_pwa: List[Dict[str, str]] = field(default_factory=list)
     users_steam: List[Dict[str, str]] = field(default_factory=list)
+    save_metadata_with_demo: bool = False
     
     def get_users_5e(self) -> List[User5E]:
         """获取 5E 用户列表"""
@@ -192,6 +193,21 @@ def _normalize_user_label(user: Dict[str, Any]) -> Dict[str, str]:
     return normalized
 
 
+def _normalize_bool(value: Any, default: bool = False) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, int):
+        return value != 0
+    normalized = str(value).strip().lower()
+    if normalized in {'1', 'true', 'yes', 'on'}:
+        return True
+    if normalized in {'0', 'false', 'no', 'off', ''}:
+        return False
+    raise ValueError(f'Invalid boolean value: {value}')
+
+
 def _normalize_config_data(data: Dict[str, Any]) -> Dict[str, Any]:
     five_e = data.get('five_e', {}) or {}
     pwa = data.get('pwa', {}) or {}
@@ -212,6 +228,7 @@ def _normalize_config_data(data: Dict[str, Any]) -> Dict[str, Any]:
 
     return {
         'download_path': data.get('download_path', '.'),
+        'save_metadata_with_demo': _normalize_bool(data.get('save_metadata_with_demo'), False),
         'steam_resolver': steam.get('resolver', data.get('steam_resolver', {})) or {},
         'steam_gc': steam.get('gc', data.get('steam_gc', {})) or {},
         'pwa': pwa_config,
@@ -273,6 +290,7 @@ def save_config(config: Config, config_path: Optional[str] = None):
         with open(config_path, 'w', encoding='utf-8') as f:
             data = {
                 'download_path': config.download_path,
+                'save_metadata_with_demo': config.save_metadata_with_demo,
                 'scheduler': config.scheduler,
                 'five_e': {'users': config.users_5e},
                 'pwa': {**config.pwa, 'users': config.users_pwa},

@@ -77,6 +77,7 @@ class LoadConfigTests(unittest.TestCase):
         self.assertEqual(config.download_path, '.')
         self.assertEqual(config.steam_resolver, {})
         self.assertEqual(config.steam_gc, {})
+        self.assertFalse(config.save_metadata_with_demo)
         self.assertEqual(config.users_5e, [])
         self.assertEqual(config.users_pwa, [])
         self.assertEqual(config.users_steam, [])
@@ -112,6 +113,7 @@ class LoadConfigTests(unittest.TestCase):
                 config_file.write('''{
   // Download into the current working directory.
   "download_path": ".",
+  "save_metadata_with_demo": "true",
   "five_e": {
     "users": [
       {"label": "five-e-label", "userid": "5e-user"}
@@ -142,6 +144,7 @@ class LoadConfigTests(unittest.TestCase):
             config = load_config(config_path)
 
         self.assertEqual('.', config.download_path)
+        self.assertTrue(config.save_metadata_with_demo)
         self.assertEqual('five-e-label', config.get_users_5e()[0].label)
         self.assertEqual('five-e-label', config.get_users_5e()[0].name)
         pwa_users = config.get_users_pwa()
@@ -298,6 +301,44 @@ class CliTests(unittest.TestCase):
 
         self.assertEqual(1, exit_code)
         self.assertIn('Invalid scheduler platform', stderr.getvalue())
+
+    def test_download_5e_writes_metadata_next_to_downloaded_demo_when_enabled(self):
+        config = Config(download_path='/tmp/demos', save_metadata_with_demo=True)
+        config.add_user_5e('five-e-user', 'userid')
+        match = cli.MatchMetadata(
+            platform='5e',
+            match_id='match-1',
+            demo_url='https://example.invalid/archive/match-1.dem.bz2',
+            demo_available=True,
+        )
+        stdout = io.StringIO()
+
+        with mock.patch('cs_demo_downloader.cli.get_5e_metadata', return_value=[match]) as get_metadata:
+            with mock.patch('cs_demo_downloader.cli.download_and_extract', return_value=True) as download:
+                with mock.patch('cs_demo_downloader.cli.write_demo_metadata', return_value='/tmp/demos/match-1.metadata.json') as write_metadata:
+                    with redirect_stdout(stdout):
+                        cli.download_5e_demos(config)
+
+        get_metadata.assert_called_once_with('userid')
+        download.assert_called_once_with('https://example.invalid/archive/match-1.dem.bz2', '/tmp/demos', cli.print_progress)
+        write_metadata.assert_called_once_with(match, '/tmp/demos')
+
+    def test_download_5e_does_not_write_metadata_when_download_fails(self):
+        config = Config(download_path='/tmp/demos', save_metadata_with_demo=True)
+        config.add_user_5e('five-e-user', 'userid')
+        match = cli.MatchMetadata(
+            platform='5e',
+            match_id='match-1',
+            demo_url='https://example.invalid/archive/match-1.zip',
+            demo_available=True,
+        )
+
+        with mock.patch('cs_demo_downloader.cli.get_5e_metadata', return_value=[match]):
+            with mock.patch('cs_demo_downloader.cli.download_and_extract', return_value=False):
+                with mock.patch('cs_demo_downloader.cli.write_demo_metadata') as write_metadata:
+                    cli.download_5e_demos(config)
+
+        write_metadata.assert_not_called()
 
 
 class DownloadFileTests(unittest.TestCase):
@@ -712,6 +753,38 @@ class PwaDownloaderTests(unittest.TestCase):
         )
         self.assertNotIn('secret-token', stdout.getvalue())
         self.assertIn('access_token=%3Credacted%3E', stdout.getvalue())
+
+    def test_cli_downloads_pwa_metadata_when_enabled(self):
+        config = Config(download_path='/tmp/demos', save_metadata_with_demo=True)
+        config.add_user_pwa('pwa-user', '76561198159976336', 'token')
+        match = cli.MatchMetadata(
+            platform='pwa',
+            match_id='match-1',
+            demo_url='https://pwaweblogin.wmpvp.com/csgo/demo/match-1_0.dem?access_token=secret-token&a=20000',
+            demo_available=True,
+        )
+        stdout = io.StringIO()
+
+        with mock.patch('cs_demo_downloader.cli.build_pwa_demo_url_signer', return_value=lambda _r, _t, _d: 'sig'):
+            with mock.patch('cs_demo_downloader.cli.build_pwa_et_decryptor', return_value=None):
+                with mock.patch('cs_demo_downloader.cli.get_pwa_metadata', return_value=[match]) as get_metadata:
+                    with mock.patch('cs_demo_downloader.cli.build_pwa_download_headers', return_value={'X-PWA-Signature': 'signed'}):
+                        with mock.patch('cs_demo_downloader.cli.download_and_extract', return_value=True) as download:
+                            with mock.patch('cs_demo_downloader.cli.write_demo_metadata', return_value='/tmp/demos/match-1_0.metadata.json') as write_metadata:
+                                with redirect_stdout(stdout):
+                                    cli.download_pwa_demos(config)
+
+        get_metadata.assert_called_once()
+        self.assertEqual('76561198159976336', get_metadata.call_args.args[0])
+        self.assertEqual('token', get_metadata.call_args.args[1])
+        download.assert_called_once_with(
+            'https://pwaweblogin.wmpvp.com/csgo/demo/match-1_0.dem?access_token=secret-token&a=20000',
+            '/tmp/demos',
+            cli.print_progress,
+            headers={'X-PWA-Signature': 'signed'},
+        )
+        write_metadata.assert_called_once_with(match, '/tmp/demos')
+        self.assertNotIn('secret-token', stdout.getvalue())
 
 
 class PvpAliveDllUpdaterTests(unittest.TestCase):

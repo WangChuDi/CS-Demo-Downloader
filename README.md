@@ -79,32 +79,28 @@ payload = metadata_list_to_dicts(matches, include_raw=False)
 Full Docker details, scheduler behavior, and image variants: [wiki Docker guide](https://github.com/WangChuDi/CS-Demo-Downloader/wiki/Usage-Guide#7-docker).
 
 ```bash
-mkdir -p config demos
-cp config.jsonc.example config/config.jsonc
-# Edit config/config.jsonc first.
+mkdir -p config demos cache
+docker compose up -d cs-demo-downloader
+```
 
+The Compose example mounts `./config` to `/config`, creates `/config/config.jsonc` on first start, and uses the app's built-in `schedule` command. The generated Docker config enables automatic downloads every day at `08:00` in the container's local timezone; this is not cron. Edit `config/config.jsonc` to add accounts or change `scheduler.daily_time`.
+
+The default image is `ghcr.io/wangchudi/cs-demo-downloader:latest`. A Wine-enabled fallback image is also published as `ghcr.io/wangchudi/cs-demo-downloader:latest-wine` for explicit DLL bridge usage.
+
+Manual one-shot download with Docker:
+
+```bash
 docker run --rm \
+  -e CS_DEMO_CREATE_DEFAULT_CONFIG=true \
+  -e CS_DEMO_SCHEDULE_CONFIG=/config/config.jsonc \
   -v "$(pwd)/config:/config" \
   -v "$(pwd)/demos:/demos" \
+  -v "$(pwd)/cache:/cache" \
   ghcr.io/wangchudi/cs-demo-downloader:latest \
   download --all --config /config/config.jsonc --output /demos
 ```
 
-The default image is `ghcr.io/wangchudi/cs-demo-downloader:latest`. A Wine-enabled fallback image is also published as `ghcr.io/wangchudi/cs-demo-downloader:latest-wine` for explicit DLL bridge usage.
-
-To run the built-in scheduler instead of a one-shot download:
-
-```bash
-docker run --rm \
-  -e CS_DEMO_SCHEDULE_ENABLED=true \
-  -e CS_DEMO_SCHEDULE_CONFIG=/config/config.jsonc \
-  -e CS_DEMO_SCHEDULE_OUTPUT=/demos \
-  -e CS_DEMO_SCHEDULE_INTERVAL_SECONDS=86400 \
-  -e CS_DEMO_SCHEDULE_PLATFORMS=all \
-  -v "$(pwd)/config:/config" \
-  -v "$(pwd)/demos:/demos" \
-  ghcr.io/wangchudi/cs-demo-downloader:latest
-```
+For container logs, progress defaults to coarse 10% updates outside a TTY. Set `CS_DEMO_PROGRESS=bar` to force an interactive progress bar or `CS_DEMO_PROGRESS=none` to hide progress lines.
 
 ## Configuration
 

@@ -3,29 +3,30 @@ services:
     image: ghcr.io/wangchudi/cs-demo-downloader:latest
     container_name: cs-demo-downloader
     volumes:
-      - ./config:/config          # 配置文件目录
-      - ./demos:/demos            # Demo 下载目录
-      - ./cache:/cache            # 可选缓存目录（例如手动缓存 PvpAlive.dll）
+      - ./config:/config          # Config directory. The app creates /config/config.jsonc on first start.
+      - ./demos:/demos            # Demo download directory.
+      - ./cache:/cache            # Optional cache directory, for example PvpAlive.dll.
+    environment:
+      CS_DEMO_CREATE_DEFAULT_CONFIG: "true"
+      CS_DEMO_SCHEDULE_CONFIG: "/config/config.jsonc"
+      CS_DEMO_PROGRESS: "auto"
     command: ["schedule"]
-    # 默认不会自动下载。启用定时下载时可取消注释以下环境变量：
-    # environment:
-    #   CS_DEMO_SCHEDULE_ENABLED: "true"
-    #   CS_DEMO_SCHEDULE_CONFIG: "/config/config.jsonc"
-    #   CS_DEMO_SCHEDULE_OUTPUT: "/demos"
-    #   CS_DEMO_SCHEDULE_INTERVAL_SECONDS: "86400"
-    #   CS_DEMO_SCHEDULE_RUN_ON_START: "false"
-    #   CS_DEMO_SCHEDULE_PLATFORMS: "all"
-    # 也可以使用配置文件启用：command: ["schedule", "--config", "/config/config.jsonc"]
-    # 手动运行一次: docker compose run --rm cs-demo-downloader download --all --config /config/config.jsonc --output /demos
+    # The generated Docker config enables the built-in scheduler at 08:00 every day.
+    # It is not cron; edit ./config/config.jsonc to change scheduler.daily_time or account settings.
+    # Manual one-shot run: docker compose run --rm cs-demo-downloader download --all --config /config/config.jsonc --output /demos
 
   cs-demo-downloader-wine:
     image: ghcr.io/wangchudi/cs-demo-downloader:latest-wine
     container_name: cs-demo-downloader-wine
     profiles: ["wine"]
     volumes:
-      - ./config:/config          # 配置文件目录
-      - ./demos:/demos            # Demo 下载目录
-      - ./cache:/cache            # Wine bridge 使用的 PvpAlive.dll 缓存目录
+      - ./config:/config
+      - ./demos:/demos
+      - ./cache:/cache
+    environment:
+      CS_DEMO_CREATE_DEFAULT_CONFIG: "true"
+      CS_DEMO_SCHEDULE_CONFIG: "/config/config.jsonc"
+      CS_DEMO_PROGRESS: "auto"
     command: ["schedule"]
-    # 默认不会自动下载；启用方式同默认镜像。
-    # 手动运行一次: docker compose --profile wine run --rm cs-demo-downloader-wine download --all --config /config/config.jsonc --output /demos
+    # Wine variant uses the same generated config and scheduler defaults.
+    # Manual one-shot run: docker compose --profile wine run --rm cs-demo-downloader-wine download --all --config /config/config.jsonc --output /demos

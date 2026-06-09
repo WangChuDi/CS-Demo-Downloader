@@ -24,6 +24,8 @@ RUN signer_wheel="$(python scripts/select_private_signer_wheel.py wheelhouse)" \
 VOLUME ["/config", "/demos", "/cache"]
 
 ENV DEMO_PATH=/demos
+ENV PYTHONUNBUFFERED=1
+ENV CS_DEMO_PROGRESS=auto
 
 USER appuser
 

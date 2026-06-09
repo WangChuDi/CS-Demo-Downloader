@@ -79,32 +79,28 @@ payload = metadata_list_to_dicts(matches, include_raw=False)
 完整 Docker 说明、scheduler 行为和镜像变体：[Wiki Docker 说明](https://github.com/WangChuDi/CS-Demo-Downloader/wiki/使用指南#7-docker-使用)。
 
 ```bash
-mkdir -p config demos
-cp config.jsonc.example config/config.jsonc
-# 先编辑 config/config.jsonc。
+mkdir -p config demos cache
+docker compose up -d cs-demo-downloader
+```
 
+Compose 示例会把 `./config` 挂载到 `/config`，首次启动时自动生成 `/config/config.jsonc`，并使用程序内置的 `schedule` 命令。生成的 Docker 默认配置会启用每天 `08:00` 自动下载一次，时间按容器本地时区计算；这里不是 cron。添加账号或修改运行时间时，编辑 `config/config.jsonc` 里的 `scheduler.daily_time`。
+
+默认镜像是 `ghcr.io/wangchudi/cs-demo-downloader:latest`。如果明确需要 DLL bridge fallback，也发布了带 Wine 的镜像：`ghcr.io/wangchudi/cs-demo-downloader:latest-wine`。
+
+Docker 手动执行一次下载：
+
+```bash
 docker run --rm \
+  -e CS_DEMO_CREATE_DEFAULT_CONFIG=true \
+  -e CS_DEMO_SCHEDULE_CONFIG=/config/config.jsonc \
   -v "$(pwd)/config:/config" \
   -v "$(pwd)/demos:/demos" \
+  -v "$(pwd)/cache:/cache" \
   ghcr.io/wangchudi/cs-demo-downloader:latest \
   download --all --config /config/config.jsonc --output /demos
 ```
 
-默认镜像是 `ghcr.io/wangchudi/cs-demo-downloader:latest`。如果明确需要 DLL bridge fallback，也发布了带 Wine 的镜像：`ghcr.io/wangchudi/cs-demo-downloader:latest-wine`。
-
-如果要运行内置定时器而不是一次性下载：
-
-```bash
-docker run --rm \
-  -e CS_DEMO_SCHEDULE_ENABLED=true \
-  -e CS_DEMO_SCHEDULE_CONFIG=/config/config.jsonc \
-  -e CS_DEMO_SCHEDULE_OUTPUT=/demos \
-  -e CS_DEMO_SCHEDULE_INTERVAL_SECONDS=86400 \
-  -e CS_DEMO_SCHEDULE_PLATFORMS=all \
-  -v "$(pwd)/config:/config" \
-  -v "$(pwd)/demos:/demos" \
-  ghcr.io/wangchudi/cs-demo-downloader:latest
-```
+容器非 TTY 日志默认只按 10% 粒度输出下载进度，避免刷屏。可设置 `CS_DEMO_PROGRESS=bar` 强制进度条，或设置 `CS_DEMO_PROGRESS=none` 隐藏进度。
 
 ## 配置
 

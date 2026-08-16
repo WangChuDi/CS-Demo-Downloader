@@ -156,9 +156,17 @@ The `userid` value is `11814738gjdwn7`.
 This follows the same convention as the legacy [`WangChuDi/pwa_demo_downloader`](https://github.com/WangChuDi/pwa_demo_downloader) project:
 
 1. `steamid` is the target user's SteamID64, for example `76561198159976336`.
-2. Log in at `https://partner.wmpvp.com/#/login`.
-3. Read `access_token` from the logged-in browser cookie.
-4. Fill `pwa.default_access_token` and each target `steamid` in `config.jsonc`.
+2. Open `https://partner.wmpvp.com/#/login` and use one of these two login methods:
+
+   1. **Phone-number login**: after logging in, read `access_token` from the browser cookies.
+   2. **Steam login**: after completing the login, copy the `token` value from the browser address bar. The URL should look like:
+
+      ```text
+      https://partner.wmpvp.com/#/login?state=appAdmin&token=YOUR_ACCESS_TOKEN
+      ```
+
+      The token is in the URL fragment and may not be present in the browser cookies.
+3. Fill `pwa.default_access_token` with the token and each target `steamid` in `config.jsonc`.
 
 Do not commit tokens or paste them into logs/issues. Tokens can expire; refresh the token first if PWA downloads stop working.
 

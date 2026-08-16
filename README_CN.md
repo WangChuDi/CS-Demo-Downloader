@@ -156,9 +156,17 @@ https://www.5eplay.com/player/11814738gjdwn7
 这里参考旧项目 [`WangChuDi/pwa_demo_downloader`](https://github.com/WangChuDi/pwa_demo_downloader) 的使用方式：
 
 1. `steamid` 填目标用户的 SteamID64，例如 `76561198159976336`。
-2. 登录 `https://partner.wmpvp.com/#/login`。
-3. 从登录后的浏览器 Cookie 中读取 `access_token`。
-4. 将 `pwa.default_access_token` 和每个目标 `steamid` 填入 `config.jsonc`。
+2. 打开 `https://partner.wmpvp.com/#/login`，选择以下两种登录方式之一：
+
+   1. **手机号登录**：登录后从浏览器 Cookie 中读取 `access_token`。
+   2. **Steam 登录**：完成登录后从浏览器地址栏复制 `token` 的值。成功登录后的 URL 类似：
+
+      ```text
+      https://partner.wmpvp.com/#/login?state=appAdmin&token=YOUR_ACCESS_TOKEN
+      ```
+
+      Token 位于 URL 片段中，可能不会出现在浏览器 Cookie 里。
+3. 将这个 token 填入 `pwa.default_access_token`，并将每个目标 `steamid` 填入 `config.jsonc`。
 
 不要把 token 提交到仓库，也不要贴到日志或 issue 中。Token 可能过期；如果 PWA 下载不可用，优先刷新 token。
 

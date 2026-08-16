@@ -27,6 +27,7 @@ PWA_MATCH_ROUND_SIMPLE_LIST_URL = 'https://pwaweblogin.wmpvp.com/match-api/match
 PWA_PERFECT_MOMENT_URL_PREFIX = 'https://pwacdn.wmpvp.com/client/perfectmoment'
 PWA_WEB_API_APPID = 20000
 PWA_USER_MATCH_LIST_GAME_TYPES = '10,12,14,16,27,20,33,40,41,44,51'
+# Legacy fallback only. New season codes are discovered from PWA's season list.
 PWA_SEASON_TIME_RANGES = {
     'S24': ('2026-06-05 16:00:00', '2026-09-04 15:59:59'),
     'S23': ('2026-03-06 16:00:00', '2026-06-05 15:59:59'),
@@ -363,15 +364,15 @@ def get_match_list_records(
 ) -> list[dict[str, object]]:
     """获取完美世界比赛列表原始记录。"""
     if season is not None:
-        recent_records = _get_recent_ladder_records(steamid, access_token, size=size, signer=signer, acw_tc=acw_tc, season=season)
-        if recent_records:
-            return recent_records
+        # The recent-ladder endpoint may ignore a historical season parameter.
+        # Use the encrypted user match-list endpoint for explicit seasons.
+        season_record = _find_season_record(steamid, access_token, season, acw_tc=acw_tc)
         return _get_user_match_list_records(
             steamid,
             access_token,
             size=size,
             season=season,
-            season_record=None,
+            season_record=season_record,
             acw_tc=acw_tc,
             et_decryptor=et_decryptor,
             et_decryptor_exe=et_decryptor_exe,
@@ -390,25 +391,38 @@ def get_match_list_records(
         match_count = optional_int(season_record.get('match_count'))
         if match_count == 0:
             continue
-        season_records = _get_recent_ladder_records(steamid, access_token, size=size, signer=signer, acw_tc=acw_tc, season=season_name)
-        if not season_records:
-            season_records = _get_user_match_list_records(
-                steamid,
-                access_token,
-                size=size,
-                season=season_name,
-                season_record=season_record,
-                acw_tc=acw_tc,
-                et_decryptor=et_decryptor,
-                et_decryptor_exe=et_decryptor_exe,
-                et_decryptor_timeout=et_decryptor_timeout,
-            )
+        # Query each candidate through the season-aware endpoint so a server-side
+        # fallback cannot accidentally return current-season matches.
+        season_records = _get_user_match_list_records(
+            steamid,
+            access_token,
+            size=size,
+            season=season_name,
+            season_record=season_record,
+            acw_tc=acw_tc,
+            et_decryptor=et_decryptor,
+            et_decryptor_exe=et_decryptor_exe,
+            et_decryptor_timeout=et_decryptor_timeout,
+        )
         for record in season_records:
             record.setdefault('season', season_name)
             aggregated.append(record)
             if len(aggregated) >= size:
                 return aggregated
     return aggregated
+
+
+def _find_season_record(
+    steamid: str,
+    access_token: str,
+    season: str,
+    acw_tc: str | None = None,
+) -> dict[str, object] | None:
+    """Find a requested season from PWA's live season list when available."""
+    for record in get_season_ladder_records(steamid, access_token, acw_tc=acw_tc):
+        if optional_str(record.get('season')) == season:
+            return record
+    return None
 
 
 def _get_recent_ladder_records(

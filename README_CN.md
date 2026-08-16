@@ -10,6 +10,7 @@
   - [Python API 快速开始](#python-api-快速开始)
 - [Docker 快速开始](#docker-快速开始)
 - [配置](#配置)
+- [示例](#示例)
 - [平台凭据](#平台凭据)
   - [5E](#5e)
   - [完美世界电竞 / PWA](#完美世界电竞--pwa)
@@ -137,6 +138,10 @@ docker run --rm \
 }
 ```
 
+## 示例
+
+PWA、5EPlay 和 Steam 的可运行 Python 示例位于 [`examples/`](examples/README.md) 目录。
+
 ## 平台凭据
 
 完整平台凭据说明：[Wiki 平台凭据说明](https://github.com/WangChuDi/CS-Demo-Downloader/wiki/使用指南#4-平台凭据)。
@@ -169,6 +174,8 @@ https://www.5eplay.com/player/11814738gjdwn7
 3. 将这个 token 填入 `pwa.default_access_token`，并将每个目标 `steamid` 填入 `config.jsonc`。
 
 不要把 token 提交到仓库，也不要贴到日志或 issue 中。Token 可能过期；如果 PWA 下载不可用，优先刷新 token。
+
+查询历史赛季时，可以在库函数中传入 `season` 参数，或使用 [`examples/pwa_recent_matches.py`](examples/pwa_recent_matches.py) 并设置 `PWA_SEASON`，例如 `S23`。库会优先从 PWA 的赛季列表自动识别赛季代码，因此新增赛季通常不需要修改代码中的赛季列表。内置的日期表仅作为旧响应格式的兼容兜底。
 
 ### Steam 官匹
 

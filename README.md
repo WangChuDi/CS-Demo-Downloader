@@ -10,6 +10,7 @@ Download Counter-Strike demos from 5EPlay, Perfect World Arena, and Steam offici
   - [Python API quick start](#python-api-quick-start)
 - [Quick start with Docker](#quick-start-with-docker)
 - [Configuration](#configuration)
+- [Examples](#examples)
 - [Platform credentials](#platform-credentials)
   - [5EPlay](#5eplay)
   - [Perfect World Arena / PWA](#perfect-world-arena--pwa)
@@ -137,6 +138,10 @@ Minimal config shape:
 }
 ```
 
+## Examples
+
+Runnable Python examples for PWA, 5EPlay, and Steam are available in the [`examples/`](examples/README.md) directory.
+
 ## Platform credentials
 
 Full platform credential notes: [wiki credentials guide](https://github.com/WangChuDi/CS-Demo-Downloader/wiki/Usage-Guide#4-credentials).
@@ -169,6 +174,8 @@ This follows the same convention as the legacy [`WangChuDi/pwa_demo_downloader`]
 3. Fill `pwa.default_access_token` with the token and each target `steamid` in `config.jsonc`.
 
 Do not commit tokens or paste them into logs/issues. Tokens can expire; refresh the token first if PWA downloads stop working.
+
+To query a historical PWA season, pass its season code through the library's `season` parameter or set `PWA_SEASON` when using [`examples/pwa_recent_matches.py`](examples/pwa_recent_matches.py). The library reads the available season codes from PWA first, so adding a new season does not require updating a hard-coded season list. The bundled date table is retained only as a compatibility fallback for older responses.
 
 ### Steam official matchmaking
 

@@ -559,25 +559,66 @@ class PwaDownloaderTests(unittest.TestCase):
         self.assertIn('steam_cn_token=sample-token', headers['Cookie'])
 
     def test_get_match_list_records_can_query_explicit_season(self):
-        response = mock.MagicMock()
-        response.status_code = 200
-        response.json.return_value = {'data': [{'match': 'match-s23'}]}
+        season_list_response = mock.MagicMock()
+        season_list_response.status_code = 200
+        season_list_response.json.return_value = {
+            'data': [{'season': 'S23', 'match_count': 72}],
+        }
+        match_response = mock.MagicMock()
+        match_response.status_code = 200
+        match_response.json.return_value = {'data': [{'match': 'match-s23'}]}
 
-        with mock.patch('cs_demo_downloader.core.downloader_pwa.random.randint', return_value=123456):
-            with mock.patch('cs_demo_downloader.core.downloader_pwa.time.time', return_value=1710000000):
-                with mock.patch('cs_demo_downloader.core.downloader_pwa.requests.get', return_value=response) as get:
-                    records = get_match_list_records(
-                        'steamid',
-                        'sample-token',
-                        size=10,
-                        season='S23',
-                        signer=lambda _randnum, _timestamp, data: f'signed:{data}',
-                    )
+        with mock.patch(
+            'cs_demo_downloader.core.downloader_pwa.requests.get',
+            side_effect=[season_list_response, match_response],
+        ) as get:
+            records = get_match_list_records(
+                'steamid',
+                'sample-token',
+                size=10,
+                season='S23',
+                signer=lambda _randnum, _timestamp, data: f'signed:{data}',
+            )
 
         self.assertEqual([{'match': 'match-s23'}], records)
-        params = get.call_args.kwargs['params']
+        self.assertEqual(2, get.call_count)
+        params = get.call_args_list[-1].kwargs['params']
         self.assertEqual('S23', params['season'])
-        self.assertEqual('signed:access_token=sample-token&season=S23&size=10&uid=steamid', params['s'])
+        self.assertEqual('1', params['page'])
+        self.assertEqual('10', params['page_size'])
+        self.assertNotIn('s', params)
+
+    def test_get_match_list_records_uses_live_time_range_for_new_season_code(self):
+        season_list_response = mock.MagicMock()
+        season_list_response.status_code = 200
+        season_list_response.json.return_value = {
+            'data': [{
+                'season': 'S25',
+                'match_count': 3,
+                'start_time': '2026-09-04 16:00:00',
+                'end_time': '2026-12-04 15:59:59',
+            }],
+        }
+        match_response = mock.MagicMock()
+        match_response.status_code = 200
+        match_response.json.return_value = {'data': [{'match': 'match-s25'}]}
+
+        with mock.patch(
+            'cs_demo_downloader.core.downloader_pwa.requests.get',
+            side_effect=[season_list_response, match_response],
+        ) as get:
+            records = get_match_list_records(
+                'steamid',
+                'sample-token',
+                size=10,
+                season='S25',
+            )
+
+        self.assertEqual([{'match': 'match-s25'}], records)
+        params = get.call_args_list[-1].kwargs['params']
+        self.assertEqual('S25', params['season'])
+        self.assertEqual('2026-09-04 16:00:00', params['start_time'])
+        self.assertEqual('2026-12-04 15:59:59', params['end_time'])
 
     def test_get_match_list_records_falls_back_to_decrypted_previous_season(self):
         empty_response = mock.MagicMock()
@@ -593,15 +634,9 @@ class PwaDownloaderTests(unittest.TestCase):
                 {'season': 'S23', 'match_count': 72, 'score': 2005},
             ]
         }
-        current_season_match_response = mock.MagicMock()
-        current_season_match_response.status_code = 200
-        current_season_match_response.json.return_value = {'data': []}
         current_encrypted_response = mock.MagicMock()
         current_encrypted_response.status_code = 200
         current_encrypted_response.json.return_value = {'data': {'e': 'encrypted-s24', 't': 'token-s24'}}
-        previous_recent_response = mock.MagicMock()
-        previous_recent_response.status_code = 200
-        previous_recent_response.json.return_value = {'data': []}
         previous_encrypted_response = mock.MagicMock()
         previous_encrypted_response.status_code = 200
         previous_encrypted_response.json.return_value = {'data': {'e': 'encrypted-s23', 't': 'token-s23'}}
@@ -611,7 +646,7 @@ class PwaDownloaderTests(unittest.TestCase):
                 return {'list': [{'match_id': 'match-s23'}]}
             return {'list': []}
 
-        with mock.patch('cs_demo_downloader.core.downloader_pwa.requests.get', side_effect=[empty_response, season_list_response, current_season_match_response, current_encrypted_response, previous_recent_response, previous_encrypted_response]) as get:
+        with mock.patch('cs_demo_downloader.core.downloader_pwa.requests.get', side_effect=[empty_response, season_list_response, current_encrypted_response, previous_encrypted_response]) as get:
             with mock.patch('cs_demo_downloader.core.downloader_pwa.requests.post', return_value=current_season_response):
                 records = get_match_list_records(
                     'steamid',
